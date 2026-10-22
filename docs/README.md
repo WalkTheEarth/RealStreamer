@@ -46,4 +46,4 @@ The camera — built-in or a USB Video Class webcam, including an action camera 
 
 ## Documentation status
 
-The README, architecture, testing, iOS port, security, and user/streaming/overlay guides are current as of the 1.0.0 code in this repository. Device-dependent behavior (UVC, GL compositing, WebView virtual displays, foreground-service rules) is documented from implementation and API contracts and must be validated on hardware using the checklist; this project was built without a physical Android device or KVM emulator.
+The README, architecture, testing, iOS port, security, and user/streaming/overlay guides are current as of the 1.0.1 code in this repository. Built-in camera preview/selection, encoder startup, and a local RTMP publish were validated on a Samsung Galaxy S23 FE (Android 16). Device-dependent behavior that was not exercised there (UVC, per-ROM WebView virtual displays, screen-off behavior, foreground-service rules on other OEMs) is documented from implementation and API contracts and must be validated on each target device using the checklist.

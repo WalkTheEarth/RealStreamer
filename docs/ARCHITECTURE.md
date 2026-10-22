@@ -37,7 +37,7 @@ UVC      ── OES ─┼──▶│  GPU compositor (EGL + GLES2)            
 WebView  ── OES ─┘   │    scene FBO at output resolution                      │
 Bitmap layers ───┘   └───────┬───────────────────────────────┬───────────────┘
                              │ blit                          │ blit
-                     preview SurfaceView            MediaCodec input surface
+                     preview TextureView            MediaCodec input surface
                                                      (H.264, hardware)
 AudioRecord ── PCM ──▶ MediaCodec AAC-LC ── raw AAC ──┐
                                                       ▼
@@ -110,7 +110,7 @@ Rules of thumb:
 
 `VideoCompositor` owns one EGL context, a pbuffer surface for offscreen drawing, and two window surfaces:
 
-1. the preview `Surface` from a `SurfaceView`;
+1. the preview `Surface` from a `TextureView`;
 2. the `Surface` returned by `MediaCodec.createInputSurface()`.
 
 Per frame it:
@@ -125,15 +125,18 @@ Per frame it:
 
 Camera and web frames arrive as **external OES textures**. Overlay text/chat/stats/images are **2D textures** uploaded from `Bitmap`s. Web sources are OES textures produced by offscreen WebViews (see below).
 
-### Why SurfaceView
+### Why TextureView
 
-The preview is a `SurfaceView`, not a `TextureView`. SurfaceView places its buffer beneath the window, so normal Compose content — controls, labels, and the overlay editor's selection boxes — can be drawn above the live video without a second render. The compositor writes directly into the SurfaceView's `Surface`, avoiding a texture copy through the view system.
+The preview is a `TextureView` inside a Compose `AndroidView`. A `SurfaceView` nested in that interop layer rendered black on a Samsung Galaxy S23 FE (Android 16) even while Camera2 delivered 30 fps and the compositor was swapping frames; the SurfaceView's window layer never resolved through the Compose render node. A TextureView draws as part of the normal window, so the compositor's EGL output is visible and Compose controls/handles can still sit above it. The cost is one GPU copy at preview resolution, which is negligible next to the 720p/1080p encode.
+
+The preview `Surface` is still a normal EGL window surface; only the consumer view changed. The compositor renders the scene once into its FBO and blits it to the TextureView surface and the encoder surface. The blit normalizes against the actual preview surface dimensions, not the 1280x720 render target; using the FBO size here previously placed the preview in the lower-left quarter of the view.
 
 ### Rotation and fit
 
-- The camera buffer is usually landscape. `Camera2Controller` computes `(sensorOrientation ∓ displayRotation)` (front cameras use the mirrored direction). The compositor rotates UVs 0/90/180/270 and optionally mirrors U before applying the `SurfaceTexture` matrix.
+- The camera buffer is usually landscape. `Camera2Controller` computes `(sensorOrientation ∓ displayRotation)` (front cameras use the mirrored direction) from the **physical display rotation**. The compositor rotates UVs 0/90/180/270 and optionally mirrors U before applying the `SurfaceTexture` matrix.
+- Do not confuse `context.display.rotation` with the physical display rotation. On a fixed-landscape activity the former can report 0 while the panel is rotated 90°, which makes a landscape sensor buffer look portrait and crops it hard. The controller and the display listener both use the `DisplayManager` physical rotation.
 - The camera is cover-fitted: if the sensor aspect differs from the canvas, edges are cropped, never stretched.
-- A `DisplayManager` listener updates the built-in camera's UV rotation when the device flips between the two landscape (or portrait) orientations, without restarting the camera.
+- A `DisplayManager` listener updates the built-in camera's UV rotation when the device flips between the two landscape (or portrait) orientations, without restarting the camera. It uses the same rotation source as `Camera2Controller.open`; mixing sources caused a one-frame overwrite to a sideways transform after every camera open.
 - The stream orientation is fixed by the video settings and the activity is locked to it for WYSIWYG framing.
 
 ### Overlay rendering
@@ -236,7 +239,7 @@ The manager releases the producer (`Presentation`/`VirtualDisplay`/`Surface`) be
 
 ## Live lifecycle and the streamer console
 
-- **Preview** is started when a `SurfaceView` attaches and camera permission is granted. In the foreground the camera remains open; on background without a live stream, the engine closes the camera, chat, web captures, and compositor.
+- **Preview** is started when a `TextureView` attaches and camera permission is granted. In the foreground the camera remains open; on background without a live stream, the engine closes the camera, chat, web captures, and compositor.
 - **GO LIVE** validates destinations and audio permission, requires the compositor output size to match the video settings, starts the pipeline, video encoder, audio encoder, and the foreground service, then transitions state to LIVE.
 - **STOPPING** detaches the encoder surface immediately and tears down network/encoders on a background dispatcher; the camera preview continues.
 - **Settings during a live stream**: scene, chat, camera source, and destinations apply live. Video/quality and audio-quality changes are stored, flagged as pending, and applied on the next stream. After a stop, a pending video change rebuilds the compositor so preview and encoder stay matched.

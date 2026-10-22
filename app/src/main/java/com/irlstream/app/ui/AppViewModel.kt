@@ -125,8 +125,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---- Camera ------------------------------------------------------------
 
-    fun selectCamera(kind: CameraKind, lens: LensFacing = settings.value.camera.lens, uvcKey: String? = settings.value.camera.uvcDeviceKey) {
-        engine.selectCamera(kind, lens, uvcKey)
+    fun selectCamera(
+        kind: CameraKind,
+        lens: LensFacing = settings.value.camera.lens,
+        uvcKey: String? = settings.value.camera.uvcDeviceKey,
+        cameraId: String? = settings.value.camera.cameraId,
+    ) {
+        engine.selectCamera(kind, lens, uvcKey, cameraId)
     }
 
     fun switchCamera() = engine.switchCamera()

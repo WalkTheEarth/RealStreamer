@@ -1,7 +1,9 @@
 # ADR-0004: SurfaceView preview with Compose UI above it
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0007](0007-textureview-preview-consumer.md)
 - **Date:** 2026-10-22
+
+> Superseded on 2026-10-22: the SurfaceView preview stayed black on a Galaxy S23 FE / Android 16 while camera frames and compositor swaps were live. Kept for history.
 
 ## Context
 

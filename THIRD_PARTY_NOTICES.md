@@ -36,7 +36,15 @@ The RTMP client (`core/.../rtmp/`), FLV/AMF0/H.264/AAC helpers, GL compositor, o
 
 ## Fonts and artwork
 
-The UI uses the platform system font. The adaptive app icon and notification glyph are vector artwork created for this project. The reference design chart (`New Project.png`) was supplied by the project owner.
+The UI bundles the following fonts, all under the **SIL Open Font License 1.1**:
+
+| Font | Weights used | Copyright | License text |
+|---|---|---|---|
+| Barlow | Regular, Medium, SemiBold | The Barlow Project Authors | `licenses/OFL-Barlow.txt` |
+| Barlow Condensed | SemiBold, Bold | The Barlow Project Authors | `licenses/OFL-Barlow.txt` |
+| IBM Plex Mono | Regular, Medium | IBM Corp. | `licenses/OFL-IBMPlexMono.txt` |
+
+Font files live in `app/src/main/res/font/`. The adaptive app icon and notification glyph are vector artwork created for this project. The reference design chart (`New Project.png`) was supplied by the project owner.
 
 ## Full license texts
 

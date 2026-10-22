@@ -34,7 +34,7 @@ This repository builds and ships a complete Android app:
 | Multiple RTMP destinations from a single encode | ✅ |
 | RTMPS / TLS ingest | ✅ (implemented; local end-to-end test uses plain RTMP) |
 | Independent reconnect, backoff, queueing, and keyframe gating per destination | ✅ |
-| Built-in Camera2 back/front camera, zoom, stabilization | ✅ |
+| Built-in Camera2 with every exposed camera ID, zoom, stabilization | ✅ |
 | Generic UVC webcam support (USB Video Class, no vendor code) | ✅ |
 | UVC hotplug, USB permission flow, fallback to built-in camera | ✅ |
 | WYSIWYG GPU compositor (preview is the exact encoded frame) | ✅ |
@@ -70,7 +70,7 @@ RealStreamer ships with operator and engineering documentation, not just this RE
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Planned and explicitly out-of-scope work |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 | [docs/README.md](docs/README.md) | Documentation index and reading paths |
-| [CHANGELOG.md](CHANGELOG.md) | 1.0.0 release notes |
+| [CHANGELOG.md](CHANGELOG.md) | 1.0.x release notes |
 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | Licenses and attribution |
 
 > **Name note:** the product and launcher are **RealStreamer**. The Android package namespace remains `com.irlstream.app` (and `com.irlstream.core`) for continuity; it is not user-visible. See [docs/BRANDING.md](docs/BRANDING.md).
@@ -106,7 +106,7 @@ adb shell am start -n com.irlstream.app.debug/com.irlstream.app.MainActivity
 # 3) release build (unsigned; sign before installing)
 ./gradlew :app:assembleRelease
 apksigner sign --ks your-release.jks \
-  --out RealStreamer-1.0.0.apk \
+  --out RealStreamer-1.0.1.apk \
   app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
@@ -125,7 +125,7 @@ The vendored UVC AAR in `app/libs/` contains only `arm64-v8a` and `armeabi-v7a` 
    - Custom: any `rtmp://` or `rtmps://` URL; the stream name is everything after the app path.
    Add as many as you want. Each destination gets its own connection.
 2. **Open the studio.** Grant camera and microphone access. The preview is the broadcast frame.
-3. **Choose a camera.** Tap the camera chip above the preview. Pick the built-in back/front lens or a UVC device. Put an action camera in **Webcam / UVC mode** and it will appear in the list.
+3. **Choose a camera.** Tap the camera chip in the program rail. Pick any built-in camera the phone exposes (front, main rear, ultrawide, tele, etc.) or a UVC device. Put an action camera in **Webcam / UVC mode** and it will appear in the list.
 4. **Add overlays.** Open **Overlays → On stream**. Add text, chat, stats, a web source, or an image. Drag the box on the preview to move it; drag the bottom-right handle to resize.
 5. **Add streamer-only panels.** **Overlays → Streamer only** adds chat, stats, outputs, and audio meter to the Studio sidebar. These are never encoded.
 6. **Go live.** The big GO LIVE button starts the encoder, the foreground service, and every enabled destination. The notification has an **End stream** action. You can turn the screen off and keep streaming.
@@ -137,7 +137,7 @@ The vendored UVC AAR in `app/libs/` contains only `arm64-v8a` and `armeabi-v7a` 
 ```
  Camera2 ─┐                                              ┌─> RtmpPublisher #1
           ├─> GL compositor scene (FBO) ─> preview        ├─> RtmpPublisher #2
- UVC ─────┘        │                (SurfaceView)        ├─> RtmpPublisher #3
+ UVC ─────┘        │                (TextureView)        ├─> RtmpPublisher #3
    + overlays      └─> MediaCodec H.264 (surface input) ─┤
  AudioRecord ─────────> MediaCodec AAC-LC ───────────────┘
                           │
@@ -145,7 +145,7 @@ The vendored UVC AAR in `app/libs/` contains only `arm64-v8a` and `armeabi-v7a` 
 ```
 
 - **One encode, N muxers.** The encoded H.264 access units and AAC frames are shared. Each destination has its own thread, bounded queue, connection, reconnect policy, and keyframe gate. A slow or dead service cannot stall the others.
-- **The preview is not a separate render.** The compositor renders the scene to an offscreen texture once and blits it to both the preview SurfaceView and the encoder's input surface.
+- **The preview is not a separate render.** The compositor renders the scene to an offscreen texture once and blits it to both the preview TextureView and the encoder's input surface.
 - **Overlays are real layers**, not screen capture. Text/chat/stats are Canvas-rendered bitmaps uploaded as GL textures; web sources are offscreen WebViews; images are uploads. The operator sidebar is Compose UI outside the compositor.
 - **RTMP is implemented in-house** in `core`: handshake, chunking, AMF0, FLV/AVC/AAC tagging, acknowledgements, ping/pong, chunk-size negotiation, extended timestamps, TLS. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Timestamps are rebased per connection.** Reconnects restart near 0 ms instead of resuming hours into the timeline — important for ingest servers that treat each publish as a fresh stream.

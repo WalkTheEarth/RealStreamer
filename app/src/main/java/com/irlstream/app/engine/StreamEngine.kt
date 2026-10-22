@@ -125,6 +125,7 @@ class StreamEngine private constructor(
     private val imageKeys = HashMap<String, String>()
 
     private var lastCameraFrameCount = -1L
+    private var lastCameraFrameSample = 0L
     private var lastCameraFrameChangeAt = 0L
     private var cameraNoFrameReported = false
     private var lastContentRefresh = 0L
@@ -137,6 +138,7 @@ class StreamEngine private constructor(
         started = true
 
         camera2 = Camera2Controller(context) { message -> onCameraError(message) }
+        refreshCameras()
         uvc = UvcController(context, uvcListener).also { it.start() }
         try {
             displayManager.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
@@ -462,15 +464,20 @@ class StreamEngine private constructor(
             }
         } else {
             _state.update { it.copy(cameraLabel = "Opening camera…") }
+            val selectedFacing = _state.value.builtInCameras
+                .firstOrNull { it.id == settings.camera.cameraId }
+                ?.facing
+                ?: settings.camera.lens
             c.provideCameraTexture(
                 video.width,
                 video.height,
                 0,
-                settings.camera.mirrorFrontCamera,
+                selectedFacing == LensFacing.FRONT && settings.camera.mirrorFrontCamera,
             ) { st ->
                 Log.i(TAG, "camera texture ready gen=$gen st=$st")
                 if (gen != cameraGeneration) return@provideCameraTexture
                 camera2?.open(
+                    cameraId = settings.camera.cameraId,
                     lens = settings.camera.lens,
                     targetWidth = video.width,
                     targetHeight = video.height,
@@ -500,18 +507,70 @@ class StreamEngine private constructor(
         postError(message)
     }
 
+    /** Re-enumerate the cameras exposed by Camera2 (cheap; safe during preview). */
+    fun refreshCameras() {
+        val cameras = camera2?.listCameras().orEmpty().map { entry ->
+            BuiltInCameraInfo(
+                id = entry.id,
+                label = entry.label,
+                facing = entry.facing,
+                maxWidth = entry.maxWidth,
+                maxHeight = entry.maxHeight,
+            )
+        }
+        if (cameras.isNotEmpty()) {
+            Log.i(TAG, "built-in cameras: " + cameras.joinToString { "${it.id}=${it.label}" })
+        }
+        _state.update { it.copy(builtInCameras = cameras) }
+    }
+
     fun switchCamera() {
+        val cameras = _state.value.builtInCameras
         if (settings.camera.kind == CameraKind.USB_UVC) {
-            repository.updateCamera { it.copy(kind = CameraKind.BUILT_IN) }
+            val target = cameras.firstOrNull { it.facing == settings.camera.lens } ?: cameras.firstOrNull()
+            repository.updateCamera {
+                it.copy(
+                    kind = CameraKind.BUILT_IN,
+                    lens = target?.facing ?: it.lens,
+                    cameraId = target?.id ?: it.cameraId,
+                )
+            }
+            return
+        }
+        val currentFacing = builtInCamera?.let {
+            if (it.facing == android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT) {
+                LensFacing.FRONT
+            } else {
+                LensFacing.BACK
+            }
+        } ?: settings.camera.lens
+        val currentId = builtInCamera?.cameraId ?: settings.camera.cameraId
+        val target = cameras.firstOrNull { it.facing != currentFacing && it.id != currentId }
+            ?: cameras.firstOrNull { it.id != currentId }
+        if (target != null) {
+            repository.updateCamera {
+                it.copy(kind = CameraKind.BUILT_IN, lens = target.facing, cameraId = target.id)
+            }
         } else {
             repository.updateCamera {
-                it.copy(lens = if (it.lens == LensFacing.BACK) LensFacing.FRONT else LensFacing.BACK)
+                it.copy(
+                    kind = CameraKind.BUILT_IN,
+                    lens = if (currentFacing == LensFacing.BACK) LensFacing.FRONT else LensFacing.BACK,
+                    cameraId = null,
+                )
             }
         }
     }
 
-    fun selectCamera(kind: CameraKind, lens: LensFacing = settings.camera.lens, uvcKey: String? = settings.camera.uvcDeviceKey) {
-        repository.updateCamera { it.copy(kind = kind, lens = lens, uvcDeviceKey = uvcKey) }
+    fun selectCamera(
+        kind: CameraKind,
+        lens: LensFacing = settings.camera.lens,
+        uvcKey: String? = settings.camera.uvcDeviceKey,
+        cameraId: String? = settings.camera.cameraId,
+    ) {
+        repository.updateCamera {
+            it.copy(kind = kind, lens = lens, uvcDeviceKey = uvcKey, cameraId = cameraId)
+        }
     }
 
     fun setTorch(enabled: Boolean) {
@@ -533,14 +592,14 @@ class StreamEngine private constructor(
     private fun updateBuiltInRotation() {
         if (currentCameraKind != CameraKind.BUILT_IN) return
         val info = builtInCamera ?: return
-        val rotation = try {
-            (displayManager?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation ?: 0) * 90
-        } catch (_: Throwable) {
-            0
-        }
+        // Use the same display source as Camera2Controller.open. DisplayManager can
+        // report a different rotation than the activity's display while the app is
+        // locked to landscape, which previously overwrote a correct camera transform
+        // with a sideways one a frame after the camera opened.
+        val rotation = camera2?.currentDisplayRotationDegrees() ?: 0
         val front = info.facing == android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT
         val relative = Camera2Controller.relativeRotation(info.sensorOrientation, rotation, front)
-        compositor?.setCameraSourceInfo(info.width, info.height, relative, settings.camera.mirrorFrontCamera)
+        compositor?.setCameraSourceInfo(info.width, info.height, relative, info.mirror)
     }
 
     // -----------------------------------------------------------------------
@@ -1094,9 +1153,13 @@ class StreamEngine private constructor(
             } else {
                 0L
             }
+            val cameraCount = compositor?.cameraFrameCount() ?: 0L
+            val cameraDelta = (cameraCount - lastCameraFrameSample).coerceAtLeast(0L)
+            lastCameraFrameSample = cameraCount
             _state.update {
                 it.copy(
                     fps = if (live) frames.toFloat() else 0f,
+                    cameraFps = if (previewStarted || it.isLive) cameraDelta.toFloat() else 0f,
                     videoBitrateKbps = if (live) ((bytes * 8) / 1000).toInt() else 0,
                     durationMs = duration,
                     droppedFrames = dropped,

@@ -1,6 +1,6 @@
 # Roadmap
 
-This is a direction document, not a commitment. The 1.0.0 app deliberately stops at a focused, WYSIWYG single-profile Android broadcaster.
+This is a direction document, not a commitment. The 1.0.x app deliberately stops at a focused, WYSIWYG single-profile Android broadcaster.
 
 ## Near term
 

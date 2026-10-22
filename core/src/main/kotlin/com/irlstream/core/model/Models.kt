@@ -52,6 +52,11 @@ enum class LensFacing { BACK, FRONT }
 data class CameraSettings(
     val kind: CameraKind = CameraKind.BUILT_IN,
     val lens: LensFacing = LensFacing.BACK,
+    /**
+     * Specific Camera2 camera ID, e.g. "0", "1", "2". Modern phones expose several
+     * physical cameras behind one logical camera; null keeps the lens-based default.
+     */
+    val cameraId: String? = null,
     /** Stable key of a UVC device; null means "first / only connected camera". */
     val uvcDeviceKey: String? = null,
     val mirrorFrontCamera: Boolean = true,

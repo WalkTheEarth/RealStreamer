@@ -9,7 +9,7 @@ The app needs a live preview that exactly matches the broadcast while overlays (
 
 ## Decision
 
-Render the camera and broadcast overlays into an offscreen GL texture (the scene), then blit that single texture to both the preview SurfaceView and the MediaCodec input surface. The operator console is Compose UI outside the compositor.
+Render the camera and broadcast overlays into an offscreen GL texture (the scene), then blit that single texture to both the preview TextureView and the MediaCodec input surface. The operator console is Compose UI outside the compositor.
 
 ## Consequences
 

@@ -47,27 +47,50 @@ The in-app wordmark uses `app/src/main/res/drawable-nodpi/realstreamer_badge.png
 
 The **notification** small icon remains `drawable/ic_stat_stream.xml` (a simple neon microphone). Status-bar icons are silhouettes; the full-color aperture is unsuitable at 24 dp, and Android's alpha mask would turn the magenta square into a solid block.
 
-## 3. UI palette
+## 3. UI palette and typography
 
-The UI uses a broadcast-console dark theme with a neon signal color. The magenta icon is the brand mark; it is not the UI accent.
+The UI is a **broadcast deck**: near-black instrument panels, warm paper text, acid signal green for live paths and primary actions, and the icon's magenta reserved for ON AIR / record / END. Flat fills, one-pixel rules, clipped top-right corners, square tally lamps, and monospaced data — no rounded chat-app cards or gradient glows.
 
 | Token | Hex | Use |
 |---|---|---|
-| Ink | `#050806` | App background |
-| InkRaised | `#080D0A` | Sheets |
-| Panel | `#0D1510` | Cards, controls |
-| Line | `#1C2B22` | Borders |
-| Neon | `#39FF88` | Primary actions, live, accents |
-| NeonDeep | `#12A85A` | Pressed/secondary |
-| Text | `#F0FBF4` | Primary text |
-| TextMuted | `#A6B8AC` | Secondary text |
-| Danger | `#FF5E6E` | Errors, end stream |
-| Warning | `#FFC857` | Retrying, cautions |
-| Blue | `#6EA8FF` | Custom chat platform |
-| Violet | `#B48CFF` | Twitch platform |
-| Icon magenta | `#E91E63` | Launcher/icon/badge only |
+| Ink | `#070809` | App background |
+| InkRaised | `#0B0D0F` | Sheets, rails, console |
+| Panel | `#101315` | Cards, controls |
+| PanelHigh | `#171B1E` | Insets, active segments |
+| Line | `#23282B` | Hairlines and borders |
+| LineStrong | `#394246` | Emphasized borders |
+| Signal | `#B9FF3B` | Ready/live signal path, primary actions, active controls |
+| SignalDeep | `#6C9E1D` | Pressed/secondary signal |
+| Live | `#FF2E63` | ON AIR tally, record, END STREAM |
+| Text | `#F2EFE6` | Warm paper text |
+| TextSecondary | `#B7B6AC` | Secondary text |
+| TextMuted | `#7B807C` | Muted text |
+| TextFaint | `#54595B` | Captions, disabled |
+| Danger | `#FF5449` | Errors, destructive text |
+| Warning | `#FFC24B` | Retrying, local-only, cautions |
+| Blue | `#7BA7FF` | Custom chat platform |
+| Violet | `#C49BFF` | Twitch platform |
+| Icon magenta | `#E91E63` | Launcher/icon/badge source |
 
-A future pass could adopt magenta as a secondary accent if the brand direction changes; that would require revisiting the live/error semantics (magenta and red are adjacent in hue).
+`Live` is deliberately a slightly hotter magenta than the launcher icon's `#E91E63` so it reads as a tally lamp against the Ink background. Signal green and live magenta have separate jobs: green means the signal path is healthy/ready; magenta means the encoder is on air or the stream is ending. Do not use magenta for ordinary buttons or green for recording.
+
+### Type
+
+| Family | Weights | Use |
+|---|---|---|
+| Barlow Condensed | SemiBold, Bold | Display, screen titles, section headers, buttons, micro-labels |
+| Barlow | Regular, Medium, SemiBold | Body, settings rows, chat |
+| IBM Plex Mono | Regular, Medium | Timecodes, bitrate, resolution, camera IDs, counters |
+
+All three are licensed under the SIL Open Font License 1.1. Font files live in `app/src/main/res/font/`; license texts are in [`licenses/OFL-Barlow.txt`](../licenses/OFL-Barlow.txt) and [`licenses/OFL-IBMPlexMono.txt`](../licenses/OFL-IBMPlexMono.txt). Condensed labels are uppercase with wide tracking; data is mono so digits do not jitter as they update.
+
+### Layout rules
+
+- Panels and buttons clip the **top-right** corner; the bottom-left stays square.
+- Section headers use a two-digit frame index (`01`, `02`) and a hairline rule.
+- Status is a square LED, not a round dot; the ON AIR plate has a tally bar, a lamp, and a timecode.
+- The left edge carries the icon magenta as a 2 dp registration stripe on non-studio screens.
+- Avoid pills, glows, large corner radii, and decorative gradients.
 
 ## 4. iOS, web, and future surfaces
 
@@ -83,6 +106,6 @@ The user-facing name is:
 - The wordmark strings in `StudioScreen.kt`, `WelcomeScreen.kt`, `SettingsScreen.kt`
 - Notification strings in `StreamingService.kt`
 
-The package namespace remains `com.irlstream.app` and `com.irlstream.core`. Renaming it would require moving source trees, the manifest, Gradle `namespace`/`applicationId`, scripts, and docs; it is intentionally out of scope for the 1.0.0 rebrand.
+The package namespace remains `com.irlstream.app` and `com.irlstream.core`. Renaming it would require moving source trees, the manifest, Gradle `namespace`/`applicationId`, scripts, and docs; it is intentionally out of scope for the 1.0.x rebrand.
 
 To replace the icon, regenerate the set, copy the Android mipmaps into `app/src/main/res/` with lowercase names, update `mipmap-anydpi-v26/realstreamer.xml` references and the manifest, and replace `drawable-nodpi/realstreamer_badge.png`. Keep the full source set under `icons/` for the store and future platforms.

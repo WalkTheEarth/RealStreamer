@@ -36,7 +36,7 @@ The separation is structural, not a visibility flag: the compositor iterates onl
 - The camera is the background layer and always fills the canvas with **cover** fit (cropped, never stretched).
 - Overlay bitmaps are rendered at the layer's pixel size at the current output resolution. Font sizes are specified at a 1080p reference and scale with `outputHeight / 1080`.
 - The compositor renders the scene once into an offscreen texture and blits it to both the preview and the encoder. The preview is the broadcast.
-- The overlay editor's boxes/handles are Compose UI above a SurfaceView; they are not part of the scene.
+- The overlay editor's boxes/handles are Compose UI above the TextureView preview; they are not part of the scene.
 
 ### Editing directly
 

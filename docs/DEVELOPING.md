@@ -54,7 +54,7 @@ The repository's development environment used a local `.tooling/sdk`; that direc
 keytool -genkey -v -keystore realstreamer.jks -keyalg RSA -keysize 2048 -validity 10000 -alias realstreamer
 ./gradlew :app:assembleRelease
 apksigner sign --ks realstreamer.jks \
-  --out RealStreamer-1.0.0.apk \
+  --out RealStreamer-1.0.1.apk \
   app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
@@ -119,7 +119,7 @@ Rules:
 - Never call GL methods or `SurfaceTexture.updateTexImage()` outside the compositor thread.
 - Treat encoded byte arrays as immutable and share them across destinations.
 - Keep UI work on the main thread; `_state.update` is thread-safe.
-- A camera or compositor surface is owned by its producer (SurfaceView/MediaCodec); the engine borrows it. UVC is explicitly closed and waited for before compositor teardown.
+- A camera or compositor surface is owned by its consumer/producer (TextureView/MediaCodec); the engine borrows it. UVC is explicitly closed and waited for before compositor teardown.
 - Long joins (pipeline, encoders) must not run on the main thread.
 
 ### Live lifecycle of note
@@ -212,7 +212,9 @@ It generates media with FFmpeg, publishes with our RTMP client, and validates th
 
 ### Common development pitfalls
 
-- **Preview black but no errors**: the SurfaceView's EGL surface may have failed to create; check `VideoCompositor` logs. The engine borrows the SurfaceView surface; do not release it in the engine.
+- **Preview black but no errors**: check `EngineSurface`, `VideoCompositor`, and `Camera2Controller` logs. The preview is a `TextureView` inside `AndroidView`; do not replace it with a `SurfaceView` without re-testing the Samsung/Android 16 case where the SurfaceView stayed black despite a live compositor. The engine borrows the TextureView `Surface`; do not release it in the engine.
+- **Live fails at Go Live with `setInputSurface() is valid only at Configured state`**: `VideoEncoder` must call `createInputSurface()` after `configure()` and before `start()`. This order is device-enforced and was the difference between a preview-only build and a live stream on the S23 FE.
+- **Preview in the corner or half-size**: `present()` must normalize its quad against the preview EGL surface size (`egl.surfaceWidth/Height`), not the FBO output size.
 - **UVC stale producer**: the engine calls `UvcController.closeAndWait()` before releasing the compositor or switching producers. Do not bypass that ordering.
 - **Compositor size mismatch**: while live, `activeVideo()` (the live settings) wins over the edited `settings.video`; pending changes rebuild after stop.
 - **Serialization changes**: adding a config subclass requires the `@SerialName` and a matching round-trip test; old JSON with missing fields uses defaults (ignoreUnknownKeys + defaults).

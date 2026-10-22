@@ -1,6 +1,13 @@
 # Testing
 
-This project was built and verified without a physical Android device or a KVM-enabled emulator. The automated tests below cover everything that can be exercised on a JVM. The device checklist is the handoff for the hardware-dependent half.
+The automated suite is JVM-only. The camera/preview/encoder/live-RTMP path was additionally exercised on a **Samsung Galaxy S23 FE (SM-S711B), Android 16, 1080×2340** on 2026-10-22:
+
+- all four exposed cameras listed (back 0, back 2, front 1, front 3);
+- front and rear previews rendered full-size and upright, and per-camera selection persisted;
+- a 28-second local RTMP publish to `ffmpeg -listen 1` recorded **12.9 MB** and probed as **H.264 1280×720 + AAC-LC 44.1 kHz mono**;
+- the live UI showed ON AIR, 30–31 fps, ~3.4 Mbps, and END returned to preview.
+
+UVC, web sources, screen-off, per-ROM VirtualDisplay behavior, and multi-destination recovery still need coverage on each target device. Use the checklist below as the handoff.
 
 ---
 
@@ -68,7 +75,7 @@ Both files should contain H.264 video and AAC audio. Stop one listener mid-strea
 
 ## On-device checklist
 
-Mark each item after the first install. Use `adb logcat -s StreamEngine VideoCompositor VideoEncoder AudioEngine Camera2Controller UvcController WebOverlayManager StreamingService`.
+Mark each item after the first install. Use `adb logcat -s StreamEngine EngineSurface VideoCompositor VideoEncoder AudioEngine Camera2Controller UvcController WebOverlayManager StreamingService`.
 
 ### First run and permissions
 
@@ -81,11 +88,14 @@ Mark each item after the first install. Use `adb logcat -s StreamEngine VideoCom
 
 ### Built-in camera / compositor
 
+- [ ] Every camera ID the phone exposes appears in the camera sheet and Settings → Camera, with a distinct facing/focal-length label.
+- [ ] Selecting each camera reopens the sensor; the preview fills the program frame (not a corner/quarter) and the stream label includes the selected ID.
+- [ ] With no explicit choice, the default is the lowest-numbered camera for the chosen lens and the sheet shows that same camera selected.
 - [ ] Back camera previews upright in landscape orientation.
 - [ ] Front camera previews upright and mirrored as configured.
 - [ ] Rotating the phone 180° in landscape keeps the image upright (display listener).
 - [ ] Switching resolution (720p30 → 1080p30 → 9:16) reflows the preview and restarts the camera.
-- [ ] The preview aspect matches the configured stream; no stretching.
+- [ ] The preview aspect matches the configured stream; no stretching and no unexpected hard crop (a deliberately wider lens may show a wider field of view).
 - [ ] WYSIWYG check: record one destination with FFmpeg and compare the recorded frame with the in-app preview (position of overlays, colors, crop).
 
 ### UVC
@@ -139,6 +149,8 @@ Mark each item after the first install. Use `adb logcat -s StreamEngine VideoCom
 - [ ] End stream: outputs close, the notification is removed, the preview remains.
 - [ ] Turn the screen off while live: streaming continues; the notification remains; turning it back on restores the preview.
 - [ ] Press End stream in the notification: the stream stops and the app state returns to preview.
+- [ ] Go Live reaches LIVE without an encoder exception; logcat must not contain `setInputSurface() is valid only at Configured state`.
+- [ ] The server-side recording probes as H.264 video + AAC audio at the expected resolution; the first keyframe arrives promptly.
 - [ ] 15+ minute stream: no A/V drift, no memory growth, no encoder stalls; monitor battery/temperature.
 
 ### Web / visual quality

@@ -1,6 +1,7 @@
 package com.irlstream.app.ui.components
 
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -9,7 +10,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,59 +19,53 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.irlstream.app.engine.DestinationStatus
@@ -78,30 +74,50 @@ import com.irlstream.app.ui.theme.MicroStyle
 import com.irlstream.app.ui.theme.MonoStyle
 import java.util.Locale
 import kotlin.math.max
+import kotlin.math.roundToInt
+
+/**
+ * The shared deck components.
+ *
+ * Rules for this file: flat fills, one-pixel rules, cut corners, no capsules, and
+ * data set in mono. Magenta means ON AIR; signal green means a live signal path.
+ */
 
 @Composable
 fun AppBackground(content: @Composable () -> Unit) {
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(IRL.Ink, Color(0xFF071009), IRL.Ink),
-                ),
-            ),
-    ) {
+    Box(Modifier.fillMaxSize().background(IRL.Ink)) {
+        DeckGrid(Modifier.fillMaxSize())
+        // The icon's magenta, run as a registration stripe down the edge of the deck.
         Box(
             Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(IRL.Neon.copy(alpha = 0.05f), Color.Transparent),
-                        center = androidx.compose.ui.geometry.Offset(1f, -0.3f),
-                        radius = 1600f,
-                    ),
-                ),
+                .fillMaxHeight()
+                .width(2.dp)
+                .background(IRL.Live.copy(alpha = 0.65f))
+                .align(Alignment.CenterStart),
         )
         content()
+    }
+}
+
+/** A faint instrument grid. Used behind empty space, never behind the program feed. */
+@Composable
+fun DeckGrid(
+    modifier: Modifier = Modifier,
+    cell: Dp = 44.dp,
+    color: Color = IRL.Line.copy(alpha = 0.55f),
+) {
+    Canvas(modifier) {
+        val step = cell.toPx().coerceAtLeast(1f)
+        var x = 0f
+        while (x <= size.width) {
+            drawLine(color, Offset(x, 0f), Offset(x, size.height), 1f)
+            x += step
+        }
+        var y = 0f
+        while (y <= size.height) {
+            drawLine(color, Offset(0f, y), Offset(size.width, y), 1f)
+            y += step
+        }
     }
 }
 
@@ -112,46 +128,63 @@ fun ScreenTopBar(
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    Row(
+    Column(
         Modifier
             .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .statusBarsPadding(),
     ) {
-        if (onBack != null) {
-            Box(
-                Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(IRL.Panel)
-                    .border(1.dp, IRL.Line, CircleShape)
-                    .clickable(onClick = onBack),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = IRL.Text, modifier = Modifier.size(20.dp))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 12.dp, top = 10.dp, bottom = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (onBack != null) {
+                val shape = CutCornerShape(topEnd = 8.dp)
+                Box(
+                    Modifier
+                        .size(36.dp)
+                        .clip(shape)
+                        .background(IRL.Panel)
+                        .border(1.dp, IRL.Line, shape)
+                        .clickable(onClick = onBack),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Rounded.ArrowBack,
+                        contentDescription = "Back",
+                        tint = IRL.Text,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
             }
-            Spacer(Modifier.width(12.dp))
-        }
-        Column(Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleLarge,
-                color = IRL.Text,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (subtitle != null) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = IRL.TextMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(5.dp).background(IRL.Signal))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        title.uppercase(Locale.US),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = IRL.Text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (subtitle != null) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = IRL.TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 13.dp, top = 2.dp),
+                    )
+                }
             }
+            actions()
         }
-        actions()
+        Hairline()
     }
 }
 
@@ -166,41 +199,67 @@ fun MicroLabel(text: String, color: Color = IRL.TextMuted, modifier: Modifier = 
 }
 
 @Composable
-fun AntiLabel(text: String, color: Color = IRL.TextMuted, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        style = MicroStyle.copy(letterSpacing = 0.2.sp),
-        color = color,
-        modifier = modifier,
-    )
-}
-
-@Composable
 fun PanelCard(
     modifier: Modifier = Modifier,
     background: Color = IRL.Panel,
     borderColor: Color = IRL.Line,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(18.dp),
-        color = background,
-        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+    val shape = CutCornerShape(topEnd = 18.dp)
+    Column(
+        modifier
+            .clip(shape)
+            .background(background)
+            .border(1.dp, borderColor, shape)
+            .padding(14.dp),
+        content = content,
+    )
+}
+
+/** Deck plate with an optional frame index: 03 — OUTPUTS —————— */
+@Composable
+fun SectionHeader(
+    index: String,
+    title: String,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier.fillMaxWidth().padding(top = 18.dp, bottom = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.padding(16.dp), content = content)
+        if (index.isNotBlank()) {
+            Text(
+                index,
+                style = MonoStyle.copy(fontSize = 10.sp),
+                color = IRL.Signal,
+            )
+            Spacer(Modifier.width(7.dp))
+            Box(Modifier.width(1.dp).height(11.dp).background(IRL.LineStrong))
+            Spacer(Modifier.width(8.dp))
+        } else {
+            Box(Modifier.size(5.dp).background(IRL.Signal))
+            Spacer(Modifier.width(9.dp))
+        }
+        Text(
+            title.uppercase(Locale.US),
+            style = MaterialTheme.typography.labelLarge,
+            color = IRL.Text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.width(10.dp))
+        Hairline(Modifier.weight(1f))
+        if (trailing != null) {
+            Spacer(Modifier.width(10.dp))
+            trailing()
+        }
     }
 }
 
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier, trailing: (@Composable () -> Unit)? = null) {
-    Row(
-        modifier.fillMaxWidth().padding(top = 18.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MicroLabel(text, IRL.TextMuted, Modifier.weight(1f))
-        trailing?.invoke()
-    }
+    SectionHeader("", text, modifier, trailing)
 }
 
 @Composable
@@ -212,33 +271,35 @@ fun PrimaryButton(
     enabled: Boolean = true,
     danger: Boolean = false,
 ) {
+    val shape = CutCornerShape(topEnd = 14.dp)
     val bg = when {
         !enabled -> IRL.PanelHigh
-        danger -> IRL.Danger
-        else -> IRL.Neon
+        danger -> IRL.Live
+        else -> IRL.Signal
     }
     val fg = when {
         !enabled -> IRL.TextFaint
-        danger -> IRL.Ink
+        danger -> IRL.Text
         else -> IRL.Ink
     }
     Row(
         modifier
             .height(52.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(shape)
             .background(bg)
+            .border(1.dp, fg.copy(alpha = 0.16f), shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
+            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(19.dp))
+            Spacer(Modifier.width(9.dp))
         }
         Text(
-            text,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+            text.uppercase(Locale.US),
+            style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 1.5.sp),
             color = fg,
         )
     }
@@ -253,24 +314,30 @@ fun SecondaryButton(
     enabled: Boolean = true,
     tint: Color = IRL.Text,
 ) {
+    val shape = CutCornerShape(topEnd = 8.dp)
     Row(
         modifier
             .height(46.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(IRL.Panel)
-            .border(1.dp, IRL.LineStrong, RoundedCornerShape(12.dp))
+            .clip(shape)
+            .background(IRL.InkRaised)
+            .border(1.dp, IRL.LineStrong, shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, tint = if (enabled) tint else IRL.TextFaint, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(7.dp))
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = if (enabled) tint else IRL.TextFaint,
+                modifier = Modifier.size(17.dp),
+            )
+            Spacer(Modifier.width(8.dp))
         }
         Text(
-            text,
-            style = MaterialTheme.typography.labelLarge,
+            text.uppercase(Locale.US),
+            style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 1.2.sp),
             color = if (enabled) tint else IRL.TextFaint,
         )
     }
@@ -285,15 +352,16 @@ fun IconAction(
     tint: Color = IRL.TextSecondary,
     background: Color = IRL.Panel,
     border: Boolean = true,
-    size: Int = 40,
-    iconSize: Int = 20,
+    size: Int = 38,
+    iconSize: Int = 18,
 ) {
+    val shape = CutCornerShape(topEnd = 8.dp)
     Box(
         modifier
             .size(size.dp)
-            .clip(CircleShape)
+            .clip(shape)
             .background(background)
-            .then(if (border) Modifier.border(1.dp, IRL.Line, CircleShape) else Modifier)
+            .then(if (border) Modifier.border(1.dp, IRL.Line, shape) else Modifier)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -313,23 +381,32 @@ fun ControlButton(
 ) {
     val fg = when {
         !enabled -> IRL.TextFaint
-        active -> IRL.Neon
+        active -> IRL.Signal
         else -> tint
     }
     Column(
         modifier
-            .height(56.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (active) IRL.NeonFaint else Color.Transparent)
+            .height(54.dp)
+            .clip(CutCornerShape(topEnd = 8.dp))
+            .background(if (active) IRL.SignalFaint else Color.Transparent)
+            .drawBehind {
+                if (active) {
+                    drawRect(
+                        color = IRL.Signal,
+                        topLeft = Offset(0f, size.height - 2.dp.toPx()),
+                        size = Size(size.width, 2.dp.toPx()),
+                    )
+                }
+            }
             .clickable(enabled = enabled, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, contentDescription = label, tint = fg, modifier = Modifier.size(21.dp))
-        Spacer(Modifier.height(4.dp))
+        Icon(icon, contentDescription = label, tint = fg, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.height(5.dp))
         Text(
-            label,
-            style = MicroStyle.copy(fontSize = 8.sp, letterSpacing = 0.7.sp),
+            label.uppercase(Locale.US),
+            style = MicroStyle.copy(fontSize = 8.sp, letterSpacing = 0.9.sp),
             color = fg,
             maxLines = 1,
         )
@@ -339,11 +416,11 @@ fun ControlButton(
 @Composable
 fun StatusDot(
     status: DestinationStatus,
-    size: Int = 8,
+    size: Int = 7,
     modifier: Modifier = Modifier,
 ) {
     val color = when (status) {
-        DestinationStatus.LIVE -> IRL.Neon
+        DestinationStatus.LIVE -> IRL.Signal
         DestinationStatus.CONNECTING, DestinationStatus.RECONNECTING -> IRL.Warning
         DestinationStatus.ERROR -> IRL.Danger
         DestinationStatus.DISABLED -> IRL.TextFaint
@@ -366,19 +443,21 @@ fun StatusDot(
     Box(
         modifier
             .size(size.dp)
-            .clip(CircleShape)
-            .background(color.copy(alpha = alpha)),
+            .background(color.copy(alpha = alpha))
+            .border(1.dp, color.copy(alpha = 0.35f)),
     )
 }
 
+/** Broadcast tally: a hard plate with a tally bar, a square lamp, and a timecode. */
 @Composable
 fun LiveBadge(
     live: Boolean,
     durationMs: Long,
-    idleLabel: String = "READY",
+    idleLabel: String = "STANDBY",
     modifier: Modifier = Modifier,
 ) {
-    val color = if (live) IRL.Danger else IRL.Neon
+    val color = if (live) IRL.Live else IRL.Signal
+    val shape = CutCornerShape(topEnd = 8.dp)
     val transition = rememberInfiniteTransition(label = "live")
     val pulse = if (live) {
         transition.animateFloat(
@@ -392,32 +471,36 @@ fun LiveBadge(
     }
     Row(
         modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (live) IRL.DangerFaint else IRL.NeonFaint)
-            .border(1.dp, color.copy(alpha = 0.35f), RoundedCornerShape(50))
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .height(26.dp)
+            .clip(shape)
+            .background(if (live) IRL.LiveFaint else IRL.SignalFaint)
+            .border(1.dp, color.copy(alpha = 0.5f), shape),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(color))
+        Spacer(Modifier.width(9.dp))
         Box(
             Modifier
-                .size(7.dp)
-                .clip(CircleShape)
+                .size(6.dp)
                 .background(color.copy(alpha = pulse)),
         )
         Spacer(Modifier.width(7.dp))
         Text(
-            if (live) "LIVE" else idleLabel,
-            style = MicroStyle,
+            if (live) "ON AIR" else idleLabel.uppercase(Locale.US),
+            style = MicroStyle.copy(fontSize = 9.sp, letterSpacing = 1.4.sp),
             color = color,
         )
         if (live) {
             Spacer(Modifier.width(8.dp))
+            Box(Modifier.width(1.dp).height(11.dp).background(color.copy(alpha = 0.35f)))
+            Spacer(Modifier.width(8.dp))
             Text(
                 formatDuration(durationMs),
-                style = MonoStyle.copy(fontSize = 11.sp),
+                style = MonoStyle.copy(fontSize = 10.sp),
                 color = color,
             )
         }
+        Spacer(Modifier.width(9.dp))
     }
 }
 
@@ -430,32 +513,31 @@ fun ChoiceChip(
     icon: ImageVector? = null,
     enabled: Boolean = true,
 ) {
+    val shape = CutCornerShape(topEnd = 6.dp)
+    val fg = when {
+        selected -> IRL.Ink
+        enabled -> IRL.TextSecondary
+        else -> IRL.TextFaint
+    }
     Row(
         modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (selected) IRL.Neon else IRL.Panel)
-            .border(
-                1.dp,
-                if (selected) IRL.Neon else IRL.Line,
-                RoundedCornerShape(50),
-            )
+            .height(32.dp)
+            .clip(shape)
+            .background(if (selected) IRL.Signal else IRL.Panel)
+            .border(1.dp, if (selected) IRL.Signal else IRL.LineStrong, shape)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 13.dp, vertical = 8.dp),
+            .padding(horizontal = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = if (selected) IRL.Ink else if (enabled) IRL.TextSecondary else IRL.TextFaint,
-                modifier = Modifier.size(15.dp),
-            )
+            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
         }
         Text(
             text,
             style = MaterialTheme.typography.labelMedium,
-            color = if (selected) IRL.Ink else if (enabled) IRL.TextSecondary else IRL.TextFaint,
+            color = fg,
+            maxLines = 1,
         )
     }
 }
@@ -467,32 +549,79 @@ fun Segmented(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val shape = CutCornerShape(topEnd = 8.dp)
     Row(
         modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(IRL.Panel)
-            .border(1.dp, IRL.Line, RoundedCornerShape(12.dp))
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+            .height(38.dp)
+            .clip(shape)
+            .background(IRL.InkRaised)
+            .border(1.dp, IRL.Line, shape),
     ) {
-        options.forEach { option ->
+        options.forEachIndexed { index, option ->
             val isSelected = option == selected
             Box(
                 Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(9.dp))
+                    .fillMaxHeight()
                     .background(if (isSelected) IRL.PanelHigh else Color.Transparent)
-                    .clickable { onSelect(option) }
-                    .padding(vertical = 9.dp),
+                    .drawBehind {
+                        if (isSelected) {
+                            drawRect(
+                                IRL.Signal,
+                                topLeft = Offset(0f, size.height - 2.dp.toPx()),
+                                size = Size(size.width, 2.dp.toPx()),
+                            )
+                        }
+                        if (index < options.lastIndex) {
+                            drawLine(
+                                IRL.Line,
+                                Offset(size.width, 0f),
+                                Offset(size.width, size.height),
+                                1.dp.toPx(),
+                            )
+                        }
+                    }
+                    .clickable { onSelect(option) },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     option,
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (isSelected) IRL.Neon else IRL.TextMuted,
+                    color = if (isSelected) IRL.Signal else IRL.TextMuted,
+                    maxLines = 1,
                 )
             }
         }
+    }
+}
+
+/** Square, hard-edged toggle. The thumb is a slug, not a ball. */
+@Composable
+fun DeckToggle(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = CutCornerShape(topEnd = 6.dp)
+    val thumbOffset = animateDpAsState(
+        targetValue = if (checked) 26.dp else 4.dp,
+        label = "deckToggleThumb",
+    ).value
+    Box(
+        modifier
+            .size(width = 46.dp, height = 24.dp)
+            .clip(shape)
+            .background(if (checked) IRL.Signal else IRL.PanelHigh)
+            .border(1.dp, if (checked) IRL.Signal else IRL.LineStrong, shape)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+    ) {
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = thumbOffset)
+                .size(16.dp)
+                .background(if (checked) IRL.Ink else IRL.TextMuted),
+        )
     }
 }
 
@@ -504,36 +633,26 @@ fun SettingSwitchRow(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, color = IRL.Text)
-            if (subtitle != null) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = IRL.TextMuted,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, color = IRL.Text)
+                if (subtitle != null) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = IRL.TextMuted,
+                        modifier = Modifier.padding(top = 3.dp),
+                    )
+                }
             }
+            Spacer(Modifier.width(16.dp))
+            DeckToggle(checked = checked, onCheckedChange = onCheckedChange)
         }
-        Spacer(Modifier.width(16.dp))
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = IRL.Ink,
-                checkedTrackColor = IRL.Neon,
-                checkedBorderColor = IRL.Neon,
-                uncheckedThumbColor = IRL.TextMuted,
-                uncheckedTrackColor = IRL.PanelHigh,
-                uncheckedBorderColor = IRL.LineStrong,
-            ),
-        )
+        Hairline()
     }
 }
 
@@ -546,32 +665,52 @@ fun SettingActionRow(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, color = if (enabled) IRL.Text else IRL.TextFaint)
-            if (subtitle != null) {
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = IRL.TextMuted, modifier = Modifier.padding(top = 2.dp))
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (enabled) IRL.Text else IRL.TextFaint,
+                )
+                if (subtitle != null) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = IRL.TextMuted,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
             }
+            if (value != null) {
+                Text(
+                    value,
+                    style = MonoStyle.copy(fontSize = 11.sp),
+                    color = if (enabled) IRL.Signal else IRL.TextFaint,
+                )
+                Spacer(Modifier.width(9.dp))
+            }
+            Icon(
+                Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = IRL.TextFaint,
+                modifier = Modifier.size(16.dp),
+            )
         }
-        if (value != null) {
-            Text(value, style = MaterialTheme.typography.labelMedium, color = IRL.TextSecondary)
-            Spacer(Modifier.width(6.dp))
-        }
-        Icon(
-            Icons.Rounded.ChevronRight,
-            contentDescription = null,
-            tint = IRL.TextFaint,
-            modifier = Modifier.size(18.dp),
-        )
+        Hairline()
     }
 }
 
+/**
+ * A broadcast fader: engraved track, square ticks, and a hard slug you can drag.
+ * Kept API-compatible with the old Material slider.
+ */
 @Composable
 fun IRLSlider(
     label: String,
@@ -582,24 +721,112 @@ fun IRLSlider(
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    val start = range.start
+    val end = range.endInclusive
+    val span = (end - start).takeIf { it > 0f } ?: 1f
+    val fraction = ((value - start) / span).coerceIn(0f, 1f)
+    val latestOnValueChange = rememberUpdatedState(onValueChange)
+    val tickShape = CutCornerShape(topEnd = 4.dp)
+
+    Column(modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, style = MaterialTheme.typography.titleSmall, color = IRL.Text, modifier = Modifier.weight(1f))
-            Text(valueLabel, style = MonoStyle.copy(fontSize = 12.sp), color = IRL.Neon)
+            Text(
+                label.uppercase(Locale.US),
+                style = MicroStyle.copy(fontSize = 10.sp, letterSpacing = 1.15.sp),
+                color = IRL.TextSecondary,
+                modifier = Modifier.weight(1f),
+            )
+            Box(
+                Modifier
+                    .clip(tickShape)
+                    .background(IRL.SignalFaint)
+                    .border(1.dp, IRL.Signal.copy(alpha = 0.3f), tickShape)
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+            ) {
+                Text(
+                    valueLabel,
+                    style = MonoStyle.copy(fontSize = 10.sp),
+                    color = IRL.Signal,
+                )
+            }
         }
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = range,
-            steps = steps,
-            colors = SliderDefaults.colors(
-                thumbColor = IRL.Neon,
-                activeTrackColor = IRL.Neon,
-                inactiveTrackColor = IRL.LineStrong,
-                activeTickColor = IRL.Neon.copy(alpha = 0.5f),
-                inactiveTickColor = IRL.LineStrong,
-            ),
-        )
+        Spacer(Modifier.height(5.dp))
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .height(30.dp)
+                .pointerInput(start, end, steps) {
+                    val inset = 9.dp.toPx()
+                    fun emit(x: Float) {
+                        val trackWidth = (size.width - inset * 2f).coerceAtLeast(1f)
+                        val f = ((x - inset) / trackWidth).coerceIn(0f, 1f)
+                        var next = start + f * span
+                        if (steps > 0) {
+                            val stepSize = span / (steps + 1)
+                            next = start + ((next - start) / stepSize).roundToInt() * stepSize
+                        }
+                        latestOnValueChange.value(next.coerceIn(start, end))
+                    }
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        emit(down.position.x)
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            emit(change.position.x)
+                            change.consume()
+                        }
+                    }
+                },
+        ) {
+            val inset = 9.dp.toPx()
+            val cy = size.height / 2f
+            val trackWidth = (size.width - inset * 2f).coerceAtLeast(1f)
+            val tickCount = if (steps > 0) steps + 2 else 9
+            repeat(tickCount.coerceAtLeast(2)) { index ->
+                val x = inset + trackWidth * index / (tickCount.coerceAtLeast(2) - 1).toFloat()
+                drawLine(
+                    color = IRL.LineStrong,
+                    start = Offset(x, cy - 10.dp.toPx()),
+                    end = Offset(x, cy - 6.dp.toPx()),
+                    strokeWidth = 1.dp.toPx(),
+                )
+            }
+            drawLine(
+                IRL.LineStrong,
+                Offset(inset, cy),
+                Offset(inset + trackWidth, cy),
+                strokeWidth = 2.dp.toPx(),
+            )
+            drawLine(
+                IRL.Signal,
+                Offset(inset, cy),
+                Offset(inset + trackWidth * fraction, cy),
+                strokeWidth = 2.dp.toPx(),
+            )
+            val cx = inset + trackWidth * fraction
+            val thumbWidth = 12.dp.toPx()
+            val thumbHeight = 20.dp.toPx()
+            val thumbTop = cy - thumbHeight / 2f
+            drawRect(
+                color = IRL.Ink,
+                topLeft = Offset(cx - thumbWidth / 2f, thumbTop),
+                size = Size(thumbWidth, thumbHeight),
+            )
+            drawRect(
+                color = IRL.Signal,
+                topLeft = Offset(cx - thumbWidth / 2f, thumbTop),
+                size = Size(thumbWidth, thumbHeight),
+                style = Stroke(width = 1.dp.toPx()),
+            )
+            drawLine(
+                IRL.Signal,
+                Offset(cx, cy - 4.dp.toPx()),
+                Offset(cx, cy + 4.dp.toPx()),
+                strokeWidth = 2.dp.toPx(),
+            )
+        }
     }
 }
 
@@ -639,18 +866,18 @@ fun TextFieldIRL(
         keyboardOptions = keyboardOptions,
         visualTransformation = visualTransformation,
         trailingIcon = trailingIcon,
-        shape = RoundedCornerShape(12.dp),
+        shape = CutCornerShape(topEnd = 10.dp),
         textStyle = MaterialTheme.typography.bodyMedium.copy(color = IRL.Text),
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = IRL.Text,
             unfocusedTextColor = IRL.Text,
-            focusedContainerColor = IRL.Panel,
-            unfocusedContainerColor = IRL.Panel,
-            focusedBorderColor = IRL.Neon,
-            unfocusedBorderColor = IRL.Line,
+            focusedContainerColor = IRL.InkRaised,
+            unfocusedContainerColor = IRL.InkRaised,
+            focusedBorderColor = IRL.Signal,
+            unfocusedBorderColor = IRL.LineStrong,
             errorBorderColor = IRL.Danger,
-            cursorColor = IRL.Neon,
-            focusedLabelColor = IRL.Neon,
+            cursorColor = IRL.Signal,
+            focusedLabelColor = IRL.Signal,
             unfocusedLabelColor = IRL.TextMuted,
             focusedPlaceholderColor = IRL.TextFaint,
             unfocusedPlaceholderColor = IRL.TextFaint,
@@ -673,13 +900,13 @@ fun SheetContent(
         onDismissRequest = onDismiss,
         containerColor = IRL.InkRaised,
         contentColor = IRL.Text,
-        scrimColor = Color.Black.copy(alpha = 0.72f),
+        scrimColor = Color.Black.copy(alpha = 0.76f),
+        shape = CutCornerShape(topStart = 22.dp),
         dragHandle = {
             Box(Modifier.padding(top = 10.dp, bottom = 4.dp)) {
                 Box(
                     Modifier
-                        .size(width = 38.dp, height = 4.dp)
-                        .clip(RoundedCornerShape(4.dp))
+                        .size(width = 36.dp, height = 3.dp)
                         .background(IRL.LineStrong),
                 )
             }
@@ -693,9 +920,19 @@ fun SheetContent(
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
+                .padding(bottom = 26.dp),
         ) {
-            Text(title, style = MaterialTheme.typography.headlineMedium, color = IRL.Text)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(5.dp).background(IRL.Signal))
+                Spacer(Modifier.width(8.dp))
+                MicroLabel("RealStreamer / Config", IRL.TextMuted)
+            }
+            Spacer(Modifier.height(7.dp))
+            Text(
+                title.uppercase(Locale.US),
+                style = MaterialTheme.typography.headlineMedium,
+                color = IRL.Text,
+            )
             if (subtitle != null) {
                 Text(
                     subtitle,
@@ -704,7 +941,9 @@ fun SheetContent(
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(12.dp))
+            Hairline()
+            Spacer(Modifier.height(16.dp))
             content()
             Spacer(Modifier.height(12.dp))
         }
@@ -723,32 +962,41 @@ fun EmptyState(
     Column(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 36.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(horizontal = 20.dp, vertical = 28.dp),
     ) {
-        Box(
-            Modifier
-                .size(56.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(IRL.Panel)
-                .border(1.dp, IRL.Line, RoundedCornerShape(18.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = IRL.Neon, modifier = Modifier.size(26.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val shape = CutCornerShape(topEnd = 12.dp)
+            Box(
+                Modifier
+                    .size(44.dp)
+                    .clip(shape)
+                    .background(IRL.Panel)
+                    .border(1.dp, IRL.Line, shape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = IRL.Signal, modifier = Modifier.size(21.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                MicroLabel("Not configured", IRL.TextFaint)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = IRL.Text,
+                )
+            }
         }
-        Spacer(Modifier.height(14.dp))
-        Text(title, style = MaterialTheme.typography.titleMedium, color = IRL.Text)
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(10.dp))
         Text(
             body,
             style = MaterialTheme.typography.bodySmall,
             color = IRL.TextMuted,
-            modifier = Modifier.fillMaxWidth(0.9f),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(0.94f),
         )
         if (actionLabel != null && onAction != null) {
-            Spacer(Modifier.height(18.dp))
-            PrimaryButton(actionLabel, onAction)
+            Spacer(Modifier.height(16.dp))
+            SecondaryButton(actionLabel, onAction)
         }
     }
 }
@@ -757,24 +1005,28 @@ fun EmptyState(
 fun Sparkline(
     values: List<Float>,
     modifier: Modifier = Modifier,
-    color: Color = IRL.Neon,
+    color: Color = IRL.Signal,
 ) {
     Canvas(modifier) {
         if (values.size < 2) return@Canvas
         val maxValue = max(values.maxOrNull() ?: 1f, 1f)
+        for (i in 1..3) {
+            val y = size.height * i / 4f
+            drawLine(
+                IRL.Line.copy(alpha = 0.7f),
+                Offset(0f, y),
+                Offset(size.width, y),
+                strokeWidth = 1f,
+            )
+        }
         val stepX = size.width / (values.size - 1)
         val path = Path()
         values.forEachIndexed { index, value ->
             val x = index * stepX
             val normalized = (value / maxValue).coerceIn(0f, 1f)
-            val y = size.height - normalized * size.height * 0.86f - 2.dp.toPx()
+            val y = size.height - normalized * size.height * 0.84f - 2.dp.toPx()
             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        drawPath(
-            path,
-            color = color,
-            style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round),
-        )
         val fill = Path().apply {
             addPath(path)
             lineTo(size.width, size.height)
@@ -783,28 +1035,38 @@ fun Sparkline(
         }
         drawPath(
             fill,
-            brush = Brush.verticalGradient(listOf(color.copy(alpha = 0.20f), Color.Transparent)),
+            brush = Brush.verticalGradient(listOf(color.copy(alpha = 0.16f), Color.Transparent)),
+        )
+        drawPath(
+            path,
+            color = color,
+            style = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Square),
+        )
+        val lastY = size.height - (values.last() / maxValue).coerceIn(0f, 1f) * size.height * 0.84f - 2.dp.toPx()
+        drawRect(
+            color = color,
+            topLeft = Offset(size.width - 3.dp.toPx(), lastY - 3.dp.toPx() / 2f),
+            size = Size(3.dp.toPx(), 3.dp.toPx()),
         )
     }
 }
 
 @Composable
 fun LevelMeter(level: Float, modifier: Modifier = Modifier) {
-    val segments = 22
+    val segments = 24
     val lit = (level.coerceIn(0f, 1f) * segments).toInt()
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         repeat(segments) { index ->
             val active = index < lit
             val color = when {
-                index > segments * 0.86f -> IRL.Danger
-                index > segments * 0.68f -> IRL.Warning
-                else -> IRL.Neon
+                index >= segments * 0.88f -> IRL.Danger
+                index >= segments * 0.70f -> IRL.Warning
+                else -> IRL.Signal
             }
             Box(
                 Modifier
                     .weight(1f)
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                    .height(10.dp)
                     .background(if (active) color else IRL.Line),
             )
         }
@@ -821,56 +1083,82 @@ fun InfoBanner(
     Row(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(color.copy(alpha = 0.09f))
-            .border(1.dp, color.copy(alpha = 0.22f), RoundedCornerShape(12.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .clip(CutCornerShape(topEnd = 8.dp))
+            .background(color.copy(alpha = 0.08f))
+            .border(1.dp, color.copy(alpha = 0.2f), CutCornerShape(topEnd = 8.dp))
+            .drawBehind {
+                drawRect(
+                    color = color,
+                    size = Size(3.dp.toPx(), size.height),
+                )
+            }
+            .padding(start = 12.dp, end = 11.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(15.dp))
             Spacer(Modifier.width(8.dp))
         }
-        Text(text, style = MaterialTheme.typography.bodySmall, color = color.copy(alpha = 0.92f))
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            color = IRL.TextSecondary,
+        )
+    }
+}
+
+/** Hard plate for labels like PROGRAM / LOCAL ONLY / WYSIWYG. */
+@Composable
+fun DeckPlate(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = IRL.TextSecondary,
+    filled: Boolean = false,
+) {
+    val shape = CutCornerShape(topEnd = 4.dp)
+    Box(
+        modifier
+            .clip(shape)
+            .background(if (filled) color else Color.Transparent)
+            .border(1.dp, color.copy(alpha = 0.55f), shape)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    ) {
+        Text(
+            text.uppercase(Locale.US),
+            style = MicroStyle.copy(fontSize = 8.sp, letterSpacing = 1.3.sp),
+            color = if (filled) IRL.Ink else color,
+        )
+    }
+}
+
+/** Four corner marks, for framing the program feed. */
+@Composable
+fun CornerBrackets(
+    modifier: Modifier = Modifier,
+    color: Color = IRL.Text.copy(alpha = 0.5f),
+    inset: Dp = 10.dp,
+    length: Dp = 16.dp,
+) {
+    Canvas(modifier) {
+        val i = inset.toPx()
+        val l = length.toPx()
+        val w = 1.dp.toPx()
+        val right = size.width - i
+        val bottom = size.height - i
+        drawLine(color, Offset(i, i), Offset(i + l, i), w)
+        drawLine(color, Offset(i, i), Offset(i, i + l), w)
+        drawLine(color, Offset(right, i), Offset(right - l, i), w)
+        drawLine(color, Offset(right, i), Offset(right, i + l), w)
+        drawLine(color, Offset(i, bottom), Offset(i + l, bottom), w)
+        drawLine(color, Offset(i, bottom), Offset(i, bottom - l), w)
+        drawLine(color, Offset(right, bottom), Offset(right - l, bottom), w)
+        drawLine(color, Offset(right, bottom), Offset(right, bottom - l), w)
     }
 }
 
 @Composable
 fun Hairline(modifier: Modifier = Modifier) {
     HorizontalDivider(modifier, color = IRL.Line)
-}
-
-@Composable
-fun DragGrip(modifier: Modifier = Modifier) {
-    Icon(
-        Icons.Rounded.DragHandle,
-        contentDescription = "Reorder",
-        tint = IRL.TextFaint,
-        modifier = modifier.size(18.dp),
-    )
-}
-
-@Composable
-fun SelectionCheck(selected: Boolean) {
-    Box(
-        Modifier
-            .size(20.dp)
-            .clip(CircleShape)
-            .background(if (selected) IRL.Neon else Color.Transparent)
-            .border(1.dp, if (selected) IRL.Neon else IRL.LineStrong, CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (selected) {
-            Icon(Icons.Rounded.Check, contentDescription = null, tint = IRL.Ink, modifier = Modifier.size(14.dp))
-        }
-    }
-}
-
-@Composable
-fun CloseButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    IconButton(onClick = onClick, modifier = modifier) {
-        Icon(Icons.Rounded.Close, contentDescription = "Close", tint = IRL.TextMuted)
-    }
 }
 
 fun formatDuration(ms: Long): String {
@@ -885,20 +1173,3 @@ fun formatDuration(ms: Long): String {
 fun formatBitrate(kbps: Int): String =
     if (kbps >= 1000) String.format(Locale.US, "%.1f Mbps", kbps / 1000f)
     else "$kbps kbps"
-
-fun rotateModifier(degrees: Float): Modifier = Modifier.rotate(degrees)
-
-@Composable
-fun VerticalGlowDivider(color: Color = IRL.Neon) {
-    val density = LocalDensity.current
-    Box(
-        Modifier
-            .width(1.dp)
-            .height(22.dp)
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color.Transparent, color.copy(alpha = 0.5f), Color.Transparent),
-                ),
-            ),
-    )
-}

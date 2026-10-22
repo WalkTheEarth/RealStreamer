@@ -20,8 +20,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -43,7 +42,6 @@ import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -57,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -69,16 +68,20 @@ import com.irlstream.app.engine.EngineState
 import com.irlstream.app.ui.AppViewModel
 import com.irlstream.app.ui.components.AppBackground
 import com.irlstream.app.ui.components.ChoiceChip
+import com.irlstream.app.ui.components.DeckPlate
 import com.irlstream.app.ui.components.EditablePreview
 import com.irlstream.app.ui.components.EmptyState
 import com.irlstream.app.ui.components.findActivity
+import com.irlstream.app.ui.components.Hairline
 import com.irlstream.app.ui.components.IconAction
 import com.irlstream.app.ui.components.InfoBanner
+import com.irlstream.app.ui.components.IRLSlider
 import com.irlstream.app.ui.components.LockStreamOrientation
 import com.irlstream.app.ui.components.MicroLabel
 import com.irlstream.app.ui.components.PrimaryButton
 import com.irlstream.app.ui.components.ScreenTopBar
-import com.irlstream.app.ui.components.SectionTitle
+import com.irlstream.app.ui.components.SecondaryButton
+import com.irlstream.app.ui.components.SectionHeader
 import com.irlstream.app.ui.components.Segmented
 import com.irlstream.app.ui.components.SettingSwitchRow
 import com.irlstream.app.ui.components.SheetContent
@@ -155,6 +158,18 @@ fun OverlaysScreen(vm: AppViewModel, settings: AppSettings, state: EngineState) 
                         )
                         Spacer(Modifier.height(10.dp))
                     }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        DeckPlate("PROGRAM", color = IRL.Live)
+                        Spacer(Modifier.width(6.dp))
+                        DeckPlate("WYSIWYG", color = IRL.Signal)
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "${activeWidth}×${activeHeight}",
+                            style = MonoStyle.copy(fontSize = 9.sp),
+                            color = IRL.TextFaint,
+                        )
+                    }
+                    Spacer(Modifier.height(7.dp))
                     EditablePreview(
                         aspectRatio = activeWidth.toFloat() / activeHeight,
                         sources = currentBroadcast,
@@ -173,31 +188,28 @@ fun OverlaysScreen(vm: AppViewModel, settings: AppSettings, state: EngineState) 
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                         color = IRL.TextFaint,
                     )
-                    SectionTitle("Broadcast layers") {
+                    SectionHeader("01", "Broadcast layers") {
                         Text(
                             "ADD",
                             style = MicroStyle.copy(fontSize = 8.sp),
-                            color = IRL.Neon,
-                            modifier = Modifier.clickable { addSheet = true },
+                            color = IRL.Signal,
+                            modifier = Modifier
+                                .clickable { addSheet = true }
+                                .padding(horizontal = 4.dp, vertical = 3.dp),
                         )
                     }
                     if (currentBroadcast.isEmpty()) {
-                        Surface(
-                            shape = RoundedCornerShape(18.dp),
-                            color = IRL.Panel,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, IRL.Line),
-                        ) {
-                            EmptyState(
-                                icon = Icons.Rounded.FormatSize,
-                                title = "The camera is the whole scene",
-                                body = "Add text, chat, stats, a web widget, or a logo. These are the layers viewers see.",
-                                actionLabel = "Add on-stream source",
-                                onAction = { addSheet = true },
-                            )
-                        }
+                        EmptyState(
+                            icon = Icons.Rounded.FormatSize,
+                            title = "The camera is the whole scene",
+                            body = "Add text, chat, stats, a web widget, or a logo. These are the layers viewers see.",
+                            actionLabel = "Add on-stream source",
+                            onAction = { addSheet = true },
+                        )
                     } else {
-                        currentBroadcast.sortedByDescending { it.order }.forEach { source ->
+                        currentBroadcast.sortedByDescending { it.order }.forEachIndexed { index, source ->
                             SourceRow(
+                                index = index,
                                 source = source,
                                 selected = source.id == selectedId,
                                 onSelect = { selectedId = source.id },
@@ -207,7 +219,7 @@ fun OverlaysScreen(vm: AppViewModel, settings: AppSettings, state: EngineState) 
                                 onMoveDown = { vm.moveSource(source.id, -1) },
                                 onDelete = { deleteId = source.id },
                             )
-                            Spacer(Modifier.height(7.dp))
+                            Spacer(Modifier.height(6.dp))
                         }
                     }
                     Spacer(Modifier.height(14.dp))
@@ -218,40 +230,19 @@ fun OverlaysScreen(vm: AppViewModel, settings: AppSettings, state: EngineState) 
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = IRL.Panel,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, IRL.Line),
-                    ) {
-                        Column(Modifier.padding(14.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    Modifier
-                                        .size(28.dp)
-                                        .clip(RoundedCornerShape(9.dp))
-                                        .background(IRL.NeonFaint),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(Icons.Rounded.Visibility, null, tint = IRL.Neon, modifier = Modifier.size(15.dp))
-                                }
-                                Spacer(Modifier.width(10.dp))
-                                Column {
-                                    Text("Streamer only", style = MaterialTheme.typography.titleSmall, color = IRL.Text)
-                                    Text(
-                                        "Rendered in your Studio sidebar. Never encoded into the stream.",
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                        color = IRL.TextMuted,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    SectionTitle("Streamer panels") {
+                    InfoBanner(
+                        text = "Rendered in your Studio sidebar. Never encoded into the stream.",
+                        icon = Icons.Rounded.Visibility,
+                        color = IRL.Warning,
+                    )
+                    SectionHeader("01", "Streamer panels") {
                         Text(
                             "ADD",
                             style = MicroStyle.copy(fontSize = 8.sp),
-                            color = IRL.Neon,
-                            modifier = Modifier.clickable { addSheet = true },
+                            color = IRL.Signal,
+                            modifier = Modifier
+                                .clickable { addSheet = true }
+                                .padding(horizontal = 4.dp, vertical = 3.dp),
                         )
                     }
                     if (currentStreamer.isEmpty()) {
@@ -261,8 +252,9 @@ fun OverlaysScreen(vm: AppViewModel, settings: AppSettings, state: EngineState) 
                             body = "Add a private chat reader, stream stats, output status, or an audio meter.",
                         )
                     } else {
-                        currentStreamer.sortedBy { it.order }.forEach { source ->
+                        currentStreamer.sortedBy { it.order }.forEachIndexed { index, source ->
                             SourceRow(
+                                index = index,
                                 source = source,
                                 selected = false,
                                 onSelect = { editorId = source.id },
@@ -273,11 +265,11 @@ fun OverlaysScreen(vm: AppViewModel, settings: AppSettings, state: EngineState) 
                                 onDelete = { deleteId = source.id },
                                 streamer = true,
                             )
-                            Spacer(Modifier.height(7.dp))
+                            Spacer(Modifier.height(6.dp))
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
-                    MicroLabel("Quick add", IRL.TextMuted)
+                    Spacer(Modifier.height(18.dp))
+                    MicroLabel("Quick add", IRL.TextFaint)
                     Spacer(Modifier.height(8.dp))
                     val existingPanels = currentStreamer.mapNotNull { (it.config as? SourceConfig.Console)?.panel }.toSet()
                     Row(
@@ -339,6 +331,7 @@ fun OverlaysScreen(vm: AppViewModel, settings: AppSettings, state: EngineState) 
             containerColor = IRL.InkRaised,
             titleContentColor = IRL.Text,
             textContentColor = IRL.TextMuted,
+            shape = CutCornerShape(topEnd = 18.dp),
             title = { Text("Remove layer?") },
             text = { Text("\"${deleteTarget.name}\" will be removed from the scene.") },
             confirmButton = {
@@ -359,6 +352,7 @@ fun OverlaysScreen(vm: AppViewModel, settings: AppSettings, state: EngineState) 
 
 @Composable
 private fun SourceRow(
+    index: Int,
     source: SceneSource,
     selected: Boolean,
     onSelect: () -> Unit,
@@ -369,30 +363,49 @@ private fun SourceRow(
     onDelete: () -> Unit,
     streamer: Boolean = false,
 ) {
+    val shape = CutCornerShape(topEnd = 10.dp)
+    val accent = if (streamer) IRL.Warning else IRL.Signal
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) IRL.NeonFaint else IRL.Panel)
-            .border(
-                1.dp,
-                if (selected) IRL.Neon.copy(alpha = 0.4f) else IRL.Line,
-                RoundedCornerShape(14.dp),
-            )
+            .clip(shape)
+            .background(if (selected) IRL.SignalFaint else IRL.Panel)
+            .border(1.dp, if (selected) IRL.Signal.copy(alpha = 0.45f) else IRL.Line, shape)
             .clickable(onClick = onSelect)
-            .padding(horizontal = 10.dp, vertical = 9.dp),
+            .drawBehind {
+                if (selected) {
+                    drawRect(
+                        color = IRL.Signal,
+                        size = androidx.compose.ui.geometry.Size(2.dp.toPx(), size.height),
+                    )
+                }
+            }
+            .padding(start = 10.dp, end = 4.dp, top = 7.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Text(
+            (index + 1).toString().padStart(2, '0'),
+            style = MonoStyle.copy(fontSize = 8.sp),
+            color = IRL.TextFaint,
+        )
+        Spacer(Modifier.width(7.dp))
+        val markShape = CutCornerShape(topEnd = 7.dp)
         Box(
             Modifier
-                .size(32.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(IRL.PanelHigh),
+                .size(30.dp)
+                .clip(markShape)
+                .background(IRL.PanelHigh)
+                .border(1.dp, IRL.Line, markShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(sourceIcon(source.type), null, tint = if (source.enabled) IRL.Neon else IRL.TextFaint, modifier = Modifier.size(16.dp))
+            Icon(
+                sourceIcon(source.type),
+                null,
+                tint = if (source.enabled) accent else IRL.TextFaint,
+                modifier = Modifier.size(15.dp),
+            )
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(9.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 source.name,
@@ -403,7 +416,7 @@ private fun SourceRow(
             )
             Text(
                 sourceSubtitle(source, streamer),
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                style = MicroStyle.copy(fontSize = 8.sp, letterSpacing = 0.5.sp),
                 color = IRL.TextFaint,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -415,14 +428,14 @@ private fun SourceRow(
             onClick = { onToggle(!source.enabled) },
             background = Color.Transparent,
             border = false,
-            size = 28,
-            iconSize = 15,
+            size = 26,
+            iconSize = 14,
             tint = if (source.enabled) IRL.TextSecondary else IRL.TextFaint,
         )
-        IconAction(Icons.Rounded.ArrowUpward, "Move up", onMoveUp, background = Color.Transparent, border = false, size = 28, iconSize = 14, tint = IRL.TextFaint)
-        IconAction(Icons.Rounded.ArrowDownward, "Move down", onMoveDown, background = Color.Transparent, border = false, size = 28, iconSize = 14, tint = IRL.TextFaint)
-        IconAction(Icons.Rounded.Edit, "Edit", onEdit, background = Color.Transparent, border = false, size = 28, iconSize = 14, tint = IRL.TextMuted)
-        IconAction(Icons.Rounded.Delete, "Delete", onDelete, background = Color.Transparent, border = false, size = 28, iconSize = 14, tint = IRL.Danger.copy(alpha = 0.8f))
+        IconAction(Icons.Rounded.ArrowUpward, "Move up", onMoveUp, background = Color.Transparent, border = false, size = 26, iconSize = 13, tint = IRL.TextFaint)
+        IconAction(Icons.Rounded.ArrowDownward, "Move down", onMoveDown, background = Color.Transparent, border = false, size = 26, iconSize = 13, tint = IRL.TextFaint)
+        IconAction(Icons.Rounded.Edit, "Edit", onEdit, background = Color.Transparent, border = false, size = 26, iconSize = 13, tint = IRL.TextMuted)
+        IconAction(Icons.Rounded.Delete, "Delete", onDelete, background = Color.Transparent, border = false, size = 26, iconSize = 13, tint = IRL.Danger.copy(alpha = 0.8f))
     }
 }
 
@@ -437,8 +450,7 @@ private fun AddSourceSheet(
         title = "Add overlay",
         subtitle = "Broadcast layers are visible to viewers. Streamer panels are private.",
     ) {
-        MicroLabel("On stream", IRL.Neon)
-        Spacer(Modifier.height(8.dp))
+        SectionHeader("01", "On stream")
         listOf(
             SourceType.TEXT to "Text",
             SourceType.CHAT to "Chat overlay",
@@ -454,9 +466,7 @@ private fun AddSourceSheet(
             )
             Spacer(Modifier.height(7.dp))
         }
-        Spacer(Modifier.height(16.dp))
-        MicroLabel("Streamer only", IRL.Warning)
-        Spacer(Modifier.height(8.dp))
+        SectionHeader("02", "Streamer only")
         ConsolePanel.entries.forEach { panel ->
             AddCard(
                 icon = sourceIcon(
@@ -483,33 +493,36 @@ private fun AddCard(
     title: String,
     description: String,
     onClick: () -> Unit,
-    tint: Color = IRL.Neon,
+    tint: Color = IRL.Signal,
 ) {
+    val shape = CutCornerShape(topEnd = 8.dp)
+    val markShape = CutCornerShape(topEnd = 6.dp)
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(shape)
             .background(IRL.Panel)
-            .border(1.dp, IRL.Line, RoundedCornerShape(14.dp))
+            .border(1.dp, IRL.Line, shape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
+            .padding(horizontal = 11.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .background(tint.copy(alpha = 0.1f)),
+                .size(34.dp)
+                .clip(markShape)
+                .background(tint.copy(alpha = 0.08f))
+                .border(1.dp, tint.copy(alpha = 0.2f), markShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
+            Icon(icon, null, tint = tint, modifier = Modifier.size(17.dp))
         }
         Spacer(Modifier.width(11.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = IRL.Text)
             Text(description, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp), color = IRL.TextMuted)
         }
-        Icon(Icons.Rounded.Add, null, tint = IRL.TextFaint, modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Add, null, tint = IRL.TextFaint, modifier = Modifier.size(17.dp))
     }
 }
 
@@ -594,7 +607,7 @@ private fun SourceEditorSheet(
         Row(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(CutCornerShape(topEnd = 8.dp))
                 .clickable(onClick = onDelete)
                 .padding(vertical = 12.dp),
             horizontalArrangement = Arrangement.Center,
@@ -602,7 +615,7 @@ private fun SourceEditorSheet(
         ) {
             Icon(Icons.Rounded.Delete, null, tint = IRL.Danger, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
-            Text("Delete layer", style = MaterialTheme.typography.labelMedium, color = IRL.Danger)
+            Text("DELETE LAYER", style = MaterialTheme.typography.labelLarge, color = IRL.Danger)
         }
     }
 }
@@ -769,19 +782,21 @@ private fun ImageEditor(
         )
         Spacer(Modifier.height(8.dp))
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         PrimaryButton(
             text = if (config.uri.isBlank()) "Choose image" else "Replace image",
             onClick = onPick,
             modifier = Modifier.weight(1f),
         )
         if (config.uri.isNotBlank()) {
-            androidx.compose.material3.OutlinedButton(
+            SecondaryButton(
+                text = "Clear",
                 onClick = { onUpdate(config.copy(uri = "")) },
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Text("Clear", color = IRL.TextMuted)
-            }
+                modifier = Modifier.weight(1f),
+            )
         }
     }
     Spacer(Modifier.height(10.dp))
@@ -809,22 +824,15 @@ private fun SliderSetting(
     labelValue: String,
     onChange: (Float) -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, style = MaterialTheme.typography.titleSmall, color = IRL.Text, modifier = Modifier.weight(1f))
-            Text(labelValue, style = MonoStyle.copy(fontSize = 11.sp), color = IRL.Neon)
-        }
-        androidx.compose.material3.Slider(
-            value = value,
-            onValueChange = onChange,
-            valueRange = range,
-            colors = androidx.compose.material3.SliderDefaults.colors(
-                thumbColor = IRL.Neon,
-                activeTrackColor = IRL.Neon,
-                inactiveTrackColor = IRL.LineStrong,
-            ),
-        )
-    }
+    IRLSlider(
+        label = label,
+        value = value,
+        range = range,
+        steps = 0,
+        valueLabel = labelValue,
+        onValueChange = onChange,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
@@ -835,15 +843,16 @@ private fun Swatches(label: String, options: List<Long>, selected: Long, onSelec
     Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
         options.forEach { argb ->
             val color = Color(argb.toInt())
+            val shape = CutCornerShape(topEnd = 5.dp)
             Box(
                 Modifier
                     .size(28.dp)
-                    .clip(CircleShape)
+                    .clip(shape)
                     .background(if (color.alpha == 0f) IRL.PanelHigh else color)
                     .border(
                         if (argb == selected) 2.dp else 1.dp,
-                        if (argb == selected) IRL.Neon else IRL.LineStrong,
-                        CircleShape,
+                        if (argb == selected) IRL.Signal else IRL.LineStrong,
+                        shape,
                     )
                     .clickable { onSelect(argb) },
                 contentAlignment = Alignment.Center,
@@ -911,14 +920,14 @@ private fun sourceSubtitle(source: SceneSource, streamer: Boolean): String = whe
 }
 
 private val textColors = listOf(
-    0xFFFFFFFF, 0xFF39FF88, 0xFF050806, 0xFFFF5E6E,
-    0xFFFFC857, 0xFF6EA8FF, 0xFFB48CFF,
+    0xFFFFFFFF, 0xFFB9FF3B, 0xFF070809, 0xFFFF2E63,
+    0xFFFFC24B, 0xFF7BA7FF, 0xFFC49BFF,
 )
 
 private val backdropColors = listOf(
-    0x00000000, 0x66000000, 0x99000000, 0xCC000000, 0xCC070B09,
+    0x00000000, 0x66000000, 0x99000000, 0xCC000000, 0xCC070809,
 )
 
 private val panelColors = listOf(
-    0x00000000, 0x66070B09, 0x8C070B09, 0xCC070B09,
+    0x00000000, 0x66070809, 0x8C070809, 0xCC070809,
 )

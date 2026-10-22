@@ -9,13 +9,14 @@ import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.params.StreamConfigurationMap
+import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.util.Range
 import android.util.Size
+import android.view.Display
 import android.view.Surface
-import android.view.WindowManager
 import com.irlstream.core.model.LensFacing
 import kotlin.math.abs
 
@@ -31,6 +32,16 @@ class Camera2Controller(
         val rotationDegrees: Int,
         val mirror: Boolean,
         val facing: Int,
+        val sensorOrientation: Int,
+    )
+
+    /** A selectable physical or logical camera exposed by Camera2. */
+    data class CameraEntry(
+        val id: String,
+        val label: String,
+        val facing: LensFacing,
+        val maxWidth: Int,
+        val maxHeight: Int,
         val sensorOrientation: Int,
     )
 
@@ -50,7 +61,54 @@ class Camera2Controller(
     var isOpen: Boolean = false
         private set
 
+    /**
+     * Enumerates every camera the platform exposes, including the extra rear lenses
+     * that many phones hide behind a logical camera. Only cameras that can feed a
+     * SurfaceTexture are listed.
+     */
+    fun listCameras(): List<CameraEntry> {
+        val ids = try {
+            manager.cameraIdList
+        } catch (_: Throwable) {
+            return emptyList()
+        }
+        return ids.mapNotNull { id ->
+            try {
+                val chars = manager.getCameraCharacteristics(id)
+                val facingInt = chars.get(CameraCharacteristics.LENS_FACING)
+                    ?: CameraCharacteristics.LENS_FACING_BACK
+                val facing = if (facingInt == CameraCharacteristics.LENS_FACING_FRONT) {
+                    LensFacing.FRONT
+                } else {
+                    LensFacing.BACK
+                }
+                val sizes = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                    ?.getOutputSizes(SurfaceTexture::class.java)
+                    ?.toList()
+                    .orEmpty()
+                if (sizes.isEmpty()) return@mapNotNull null
+                val largest = sizes.maxByOrNull { it.width.toLong() * it.height }
+                    ?: return@mapNotNull null
+                val focal = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                    ?.minOrNull()
+                val focalLabel = focal?.let { String.format(java.util.Locale.US, " · %.1f mm", it) }.orEmpty()
+                val facingLabel = if (facing == LensFacing.FRONT) "Front camera" else "Back camera"
+                CameraEntry(
+                    id = id,
+                    label = "$facingLabel$focalLabel",
+                    facing = facing,
+                    maxWidth = largest.width,
+                    maxHeight = largest.height,
+                    sensorOrientation = chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90,
+                )
+            } catch (_: Throwable) {
+                null
+            }
+        }.sortedWith(compareBy({ it.facing.ordinal }, { it.id.toIntOrNull() ?: Int.MAX_VALUE }, { it.id }))
+    }
+
     fun open(
+        cameraId: String?,
         lens: LensFacing,
         targetWidth: Int,
         targetHeight: Int,
@@ -63,7 +121,10 @@ class Camera2Controller(
         val generation = ++openGeneration
         handler.post {
             try {
-                val id = findCameraId(lens) ?: run {
+                val requestedId = cameraId?.takeIf { candidate ->
+                    runCatching { candidate in manager.cameraIdList }.getOrDefault(false)
+                }
+                val id = requestedId ?: findCameraId(lens) ?: run {
                     onError("No ${if (lens == LensFacing.FRONT) "front" else "back"} camera found")
                     return@post
                 }
@@ -80,16 +141,26 @@ class Camera2Controller(
                     onError("Camera has no preview output sizes")
                     return@post
                 }
-                val size = chooseSize(sizes, targetWidth, targetHeight)
-                Log.i(TAG, "opening camera $id, target=${targetWidth}x$targetHeight -> ${size.width}x${size.height}, sizes=${sizes.size}")
-                surfaceTexture.setDefaultBufferSize(size.width, size.height)
-                val previewSurface = Surface(surfaceTexture)
-                surface = previewSurface
-
                 val sensorOrientation = chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
                 val displayRotation = displayRotationDegrees()
                 val mirror = facing == CameraCharacteristics.LENS_FACING_FRONT
                 val rotation = relativeRotation(sensorOrientation, displayRotation, mirror)
+                val rotated = rotation == 90 || rotation == 270
+                // Keep the buffer in the stream's orientation. The compositor applies
+                // the sensor rotation; requesting an already-swapped buffer can leave a
+                // portrait buffer behind when the display rotation changes at launch.
+                val size = chooseSize(sizes, targetWidth, targetHeight)
+                val effectiveWidth = if (rotated) size.height else size.width
+                val effectiveHeight = if (rotated) size.width else size.height
+                Log.i(
+                    TAG,
+                    "opening camera $id, target=${targetWidth}x$targetHeight -> buffer=${size.width}x${size.height} " +
+                        "facing=${if (mirror) "front" else "back"} sensor=$sensorOrientation " +
+                        "display=$displayRotation rotation=$rotation mirror=$mirror, sizes=${sizes.size}",
+                )
+                surfaceTexture.setDefaultBufferSize(size.width, size.height)
+                val previewSurface = Surface(surfaceTexture)
+                surface = previewSurface
 
                 manager.openCamera(id, object : CameraDevice.StateCallback() {
                     override fun onOpened(camera: CameraDevice) {
@@ -126,7 +197,7 @@ class Camera2Controller(
                                         onOpened(
                                             Info(
                                                 cameraId = id,
-                                                label = "${if (facing == CameraCharacteristics.LENS_FACING_FRONT) "Front" else "Back"} camera · ${size.width}×${size.height}",
+                                                label = "${if (facing == CameraCharacteristics.LENS_FACING_FRONT) "Front" else "Back"} camera $id · ${effectiveWidth}×${effectiveHeight}",
                                                 width = size.width,
                                                 height = size.height,
                                                 rotationDegrees = rotation,
@@ -277,13 +348,17 @@ class Camera2Controller(
     private fun findCameraId(lens: LensFacing): String? {
         val target = if (lens == LensFacing.FRONT) CameraCharacteristics.LENS_FACING_FRONT
         else CameraCharacteristics.LENS_FACING_BACK
-        return manager.cameraIdList.firstOrNull { id ->
+        // CameraManager's order is not guaranteed. Numeric order keeps the default
+        // (camera 0) aligned with the first entry shown in the picker.
+        val ids = runCatching { manager.cameraIdList.toList() }.getOrDefault(emptyList())
+            .sortedWith(compareBy({ it.toIntOrNull() ?: Int.MAX_VALUE }, { it }))
+        return ids.firstOrNull { id ->
             try {
                 manager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING) == target
             } catch (_: Throwable) {
                 false
             }
-        } ?: manager.cameraIdList.firstOrNull()
+        } ?: ids.firstOrNull()
     }
 
     private fun chooseSize(sizes: List<Size>, targetWidth: Int, targetHeight: Int): Size {
@@ -307,15 +382,17 @@ class Camera2Controller(
             } ?: sizes.first()
     }
 
+    /** Display rotation from the same source used when the camera was opened. */
+    fun currentDisplayRotationDegrees(): Int = displayRotationDegrees()
+
     private fun displayRotationDegrees(): Int {
         return try {
-            val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            @Suppress("DEPRECATION")
-            val rotation = if (android.os.Build.VERSION.SDK_INT >= 30) {
-                context.display?.rotation ?: wm.defaultDisplay.rotation
-            } else {
-                wm.defaultDisplay.rotation
-            }
+            // Use the physical display rotation, not context.display.rotation. On a
+            // fixed-landscape activity the latter can report 0 while the panel is
+            // rotated 90 degrees, which makes the camera rotate a landscape buffer into
+            // a portrait frame and crop it hard.
+            val dm = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+            val rotation = dm.getDisplay(Display.DEFAULT_DISPLAY)?.rotation ?: 0
             rotation * 90
         } catch (_: Throwable) {
             0

@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -140,8 +140,8 @@ fun AppRoot(vm: AppViewModel) {
             Snackbar(
                 containerColor = IRL.PanelHigh,
                 contentColor = IRL.Text,
-                shape = RoundedCornerShape(12.dp),
-                actionContentColor = IRL.Neon,
+                shape = CutCornerShape(topEnd = 10.dp),
+                actionContentColor = IRL.Signal,
             ) {
                 Text(data.visuals.message, style = MaterialTheme.typography.bodySmall)
             }

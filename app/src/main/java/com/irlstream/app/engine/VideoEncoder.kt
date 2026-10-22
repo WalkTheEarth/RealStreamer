@@ -67,8 +67,10 @@ class VideoEncoder(
                     }
                 }
                 codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-                codec.start()
+                // createInputSurface() is only legal in the Configured state. Starting
+                // the codec first makes every hardware encoder reject it.
                 val surface = codec.createInputSurface()
+                codec.start()
                 return codec to surface
             } catch (t: Throwable) {
                 lastError = t

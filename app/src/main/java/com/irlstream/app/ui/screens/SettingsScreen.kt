@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.Usb
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -61,12 +62,13 @@ import com.irlstream.app.ui.components.InfoBanner
 import com.irlstream.app.ui.components.MicroLabel
 import com.irlstream.app.ui.components.PanelCard
 import com.irlstream.app.ui.components.ScreenTopBar
-import com.irlstream.app.ui.components.SectionTitle
+import com.irlstream.app.ui.components.SectionHeader
 import com.irlstream.app.ui.components.SettingActionRow
 import com.irlstream.app.ui.components.Segmented
 import com.irlstream.app.ui.components.SettingSwitchRow
 import com.irlstream.app.ui.components.TextFieldIRL
 import com.irlstream.app.ui.theme.IRL
+import com.irlstream.app.ui.theme.MicroStyle
 import com.irlstream.app.ui.theme.MonoStyle
 import com.irlstream.core.model.AppSettings
 import com.irlstream.core.model.AudioInput
@@ -89,7 +91,7 @@ fun SettingsScreen(vm: AppViewModel, settings: AppSettings, state: EngineState) 
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp),
             ) {
-                SectionTitle("Sources & outputs")
+                SectionHeader("01", "Sources & outputs")
                 PanelCard(Modifier.fillMaxWidth()) {
                     SettingActionRow(
                         title = "Overlays & sources",
@@ -97,7 +99,6 @@ fun SettingsScreen(vm: AppViewModel, settings: AppSettings, state: EngineState) 
                         value = "${settings.scene.broadcastSources.size} layers",
                         onClick = { vm.open(Screen.Overlays) },
                     )
-                    androidx.compose.material3.HorizontalDivider(color = IRL.Line)
                     SettingActionRow(
                         title = "Destinations",
                         subtitle = "RTMP / RTMPS outputs",
@@ -119,7 +120,7 @@ fun SettingsScreen(vm: AppViewModel, settings: AppSettings, state: EngineState) 
 
 @Composable
 private fun VideoSection(vm: AppViewModel, settings: AppSettings, state: EngineState) {
-    SectionTitle("Video")
+    SectionHeader("02", "Video")
     PanelCard(Modifier.fillMaxWidth()) {
         if (state.isLive && state.pendingVideoSettings) {
             InfoBanner(
@@ -185,7 +186,7 @@ private fun VideoSection(vm: AppViewModel, settings: AppSettings, state: EngineS
 
 @Composable
 private fun AudioSection(vm: AppViewModel, settings: AppSettings, state: EngineState) {
-    SectionTitle("Audio")
+    SectionHeader("03", "Audio")
     PanelCard(Modifier.fillMaxWidth()) {
         if (state.isLive && state.pendingAudioSettings) {
             InfoBanner("Audio changes are saved and apply on the next stream.")
@@ -256,33 +257,43 @@ private fun AudioSection(vm: AppViewModel, settings: AppSettings, state: EngineS
 
 @Composable
 private fun CameraSection(vm: AppViewModel, settings: AppSettings, state: EngineState) {
-    SectionTitle("Camera")
+    SectionHeader("04", "Camera")
     PanelCard(Modifier.fillMaxWidth()) {
-        MicroLabel("Built-in", IRL.TextMuted)
+        MicroLabel("Built-in cameras", IRL.TextMuted)
         Spacer(Modifier.height(8.dp))
-        CameraSettingRow(
-            title = "Back camera",
-            subtitle = "Main sensor · best for IRL",
-            icon = Icons.Rounded.Videocam,
-            selected = settings.camera.kind == CameraKind.BUILT_IN && settings.camera.lens == LensFacing.BACK,
-            onClick = { vm.selectCamera(CameraKind.BUILT_IN, LensFacing.BACK) },
-        )
-        Spacer(Modifier.height(6.dp))
-        CameraSettingRow(
-            title = "Front camera",
-            subtitle = "Selfie framing",
-            icon = Icons.Rounded.Cameraswitch,
-            selected = settings.camera.kind == CameraKind.BUILT_IN && settings.camera.lens == LensFacing.FRONT,
-            onClick = { vm.selectCamera(CameraKind.BUILT_IN, LensFacing.FRONT) },
-        )
-        Spacer(Modifier.height(14.dp))
+        if (state.builtInCameras.isEmpty()) {
+            InfoBanner(
+                "No built-in cameras reported yet. Check the camera permission.",
+                icon = Icons.Rounded.Warning,
+                color = IRL.Warning,
+            )
+        } else {
+            state.builtInCameras.forEach { camera ->
+                CameraSettingRow(
+                    title = camera.label,
+                    subtitle = "Camera ${camera.id} · up to ${camera.maxWidth}×${camera.maxHeight}",
+                    icon = if (camera.facing == LensFacing.FRONT) Icons.Rounded.Cameraswitch else Icons.Rounded.Videocam,
+                    selected = settings.camera.kind == CameraKind.BUILT_IN && (
+                        settings.camera.cameraId == camera.id ||
+                            (settings.camera.cameraId == null && settings.camera.lens == camera.facing)
+                        ),
+                    onClick = {
+                        vm.selectCamera(CameraKind.BUILT_IN, camera.facing, null, camera.id)
+                    },
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+        Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             MicroLabel("UVC / USB webcam", IRL.TextMuted, Modifier.weight(1f))
             Text(
                 "REFRESH",
                 style = com.irlstream.app.ui.theme.MicroStyle.copy(fontSize = 8.sp),
-                color = IRL.Neon,
-                modifier = Modifier.clickable { vm.refreshUvc() },
+                color = IRL.Signal,
+                modifier = Modifier
+                    .clickable { vm.refreshUvc() }
+                    .padding(horizontal = 4.dp, vertical = 3.dp),
             )
         }
         Spacer(Modifier.height(8.dp))
@@ -327,7 +338,7 @@ private fun CameraSection(vm: AppViewModel, settings: AppSettings, state: Engine
 @Composable
 private fun ChatSection(vm: AppViewModel, settings: AppSettings, state: EngineState) {
     var revealToken by remember { mutableStateOf(false) }
-    SectionTitle("Chat")
+    SectionHeader("05", "Chat")
     PanelCard(Modifier.fillMaxWidth()) {
         Text(
             state.chatStatus,
@@ -424,7 +435,7 @@ private fun ChatSection(vm: AppViewModel, settings: AppSettings, state: EngineSt
 
 @Composable
 private fun ConsoleSection(vm: AppViewModel, settings: AppSettings) {
-    SectionTitle("Streamer console")
+    SectionHeader("06", "Streamer console")
     PanelCard(Modifier.fillMaxWidth()) {
         SettingSwitchRow(
             title = "Show the console",
@@ -450,24 +461,28 @@ private fun ConsoleSection(vm: AppViewModel, settings: AppSettings) {
 
 @Composable
 private fun AboutSection() {
-    SectionTitle("About")
+    SectionHeader("07", "About")
     PanelCard(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            val logoShape = CutCornerShape(topEnd = 8.dp)
             Image(
                 painter = painterResource(R.drawable.realstreamer_badge),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(30.dp)
-                    .clip(RoundedCornerShape(9.dp)),
+                    .size(32.dp)
+                    .clip(logoShape)
+                    .border(1.dp, IRL.LineStrong, logoShape),
             )
-            Spacer(Modifier.width(9.dp))
-            Text(
-                "REALSTREAMER",
-                style = MaterialTheme.typography.titleMedium.copy(letterSpacing = 1.4.sp, fontWeight = FontWeight.Bold),
-                color = IRL.Text,
-                modifier = Modifier.weight(1f),
-            )
-            Text("1.0.0", style = MonoStyle.copy(fontSize = 11.sp), color = IRL.TextMuted)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "REALSTREAMER",
+                    style = MaterialTheme.typography.titleLarge.copy(letterSpacing = 1.6.sp),
+                    color = IRL.Text,
+                )
+                MicroLabel("Broadcast deck", IRL.TextFaint)
+            }
+            Text("1.0.1", style = MonoStyle.copy(fontSize = 10.sp), color = IRL.TextMuted)
         }
         Spacer(Modifier.height(6.dp))
         Text(
@@ -483,8 +498,8 @@ private fun AboutSection() {
         )
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(5.dp).clip(androidx.compose.foundation.shape.CircleShape).background(IRL.Neon))
-            Spacer(Modifier.width(6.dp))
+            Box(Modifier.size(5.dp).background(IRL.Signal))
+            Spacer(Modifier.width(7.dp))
             Text("WYSIWYG compositor · UVC · multi-output RTMP", style = MonoStyle.copy(fontSize = 9.sp), color = IRL.TextFaint)
         }
     }
@@ -498,24 +513,34 @@ private fun CameraSettingRow(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val shape = CutCornerShape(topEnd = 8.dp)
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) IRL.NeonFaint else IRL.PanelHigh)
-            .border(1.dp, if (selected) IRL.Neon.copy(alpha = 0.35f) else IRL.Line, RoundedCornerShape(12.dp))
+            .clip(shape)
+            .background(if (selected) IRL.SignalFaint else IRL.PanelHigh)
+            .border(1.dp, if (selected) IRL.Signal.copy(alpha = 0.4f) else IRL.Line, shape)
             .clickable(onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, tint = if (selected) IRL.Neon else IRL.TextMuted, modifier = Modifier.size(19.dp))
+        Icon(icon, null, tint = if (selected) IRL.Signal else IRL.TextMuted, modifier = Modifier.size(19.dp))
         Spacer(Modifier.width(9.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = IRL.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp), color = IRL.TextMuted, maxLines = 1)
+            Text(subtitle, style = MicroStyle.copy(fontSize = 9.sp, letterSpacing = 0.5.sp), color = IRL.TextMuted, maxLines = 1)
         }
         if (selected) {
-            Icon(Icons.Rounded.Check, null, tint = IRL.Neon, modifier = Modifier.size(17.dp))
+            val checkShape = CutCornerShape(topEnd = 4.dp)
+            Box(
+                Modifier
+                    .size(17.dp)
+                    .clip(checkShape)
+                    .background(IRL.Signal),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Rounded.Check, null, tint = IRL.Ink, modifier = Modifier.size(12.dp))
+            }
         }
     }
 }

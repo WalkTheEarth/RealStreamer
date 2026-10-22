@@ -1,6 +1,7 @@
 package com.irlstream.app.engine
 
 import com.irlstream.core.model.CameraKind
+import com.irlstream.core.model.LensFacing
 
 enum class StreamPhase { IDLE, PREVIEW, LIVE, STOPPING }
 
@@ -35,8 +36,17 @@ data class UvcDeviceInfo(
     val productId: Int,
 )
 
+data class BuiltInCameraInfo(
+    val id: String,
+    val label: String,
+    val facing: LensFacing,
+    val maxWidth: Int,
+    val maxHeight: Int,
+)
+
 data class StatsSnapshot(
     val fps: Float = 0f,
+    val cameraFps: Float = 0f,
     val bitrateKbps: Int = 0,
     val droppedFrames: Long = 0,
     val uptimeMs: Long = 0,
@@ -50,6 +60,7 @@ data class EngineState(
     val liveStartedAtMs: Long? = null,
     val durationMs: Long = 0,
     val fps: Float = 0f,
+    val cameraFps: Float = 0f,
     val videoBitrateKbps: Int = 0,
     val droppedFrames: Long = 0,
     val destinations: List<DestinationRuntime> = emptyList(),
@@ -59,6 +70,7 @@ data class EngineState(
     val audioMuted: Boolean = false,
     val cameraLabel: String = "Camera idle",
     val cameraKind: CameraKind? = null,
+    val builtInCameras: List<BuiltInCameraInfo> = emptyList(),
     val uvcDevices: List<UvcDeviceInfo> = emptyList(),
     val uvcAttached: Boolean = false,
     val resolution: String = "",

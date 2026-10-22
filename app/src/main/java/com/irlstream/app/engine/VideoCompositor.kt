@@ -85,6 +85,8 @@ class VideoCompositor(
 
     @Volatile
     private var cameraFrames: Long = 0
+    private var lastPreviewPresent = ""
+    private var lastCameraQuad = ""
     private var lastFrameNanos: Long = 0
     private var lastDropReported = 0L
 
@@ -323,6 +325,13 @@ class VideoCompositor(
         if (!egl.makeCurrent(surface)) return
         val w = egl.surfaceWidth(surface).coerceAtLeast(1)
         val h = egl.surfaceHeight(surface).coerceAtLeast(1)
+        if (surface == previewEglSurface) {
+            val key = "${w}x$h"
+            if (key != lastPreviewPresent) {
+                Log.i(TAG, "present preview $key (fbo ${outputWidth}x$outputHeight)")
+                lastPreviewPresent = key
+            }
+        }
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
         GLES20.glViewport(0, 0, w, h)
         GLES20.glDisable(GLES20.GL_BLEND)
@@ -333,7 +342,16 @@ class VideoCompositor(
         GLES20.glUniform1i(program.uTexture, 0)
         GLES20.glUniform1f(program.uAlpha, 1f)
         GLES20.glUniformMatrix4fv(program.uTexMatrix, 1, false, identity, 0)
-        drawQuad(program, 0f, 0f, w.toFloat(), h.toFloat(), flipY = false)
+        drawQuad(
+            program,
+            0f,
+            0f,
+            w.toFloat(),
+            h.toFloat(),
+            flipY = false,
+            viewWidth = w,
+            viewHeight = h,
+        )
         if (surface == encoderEglSurface) {
             val epoch = epochNanos
             val pts = if (epoch > 0 && nowNanos != null) (nowNanos - epoch).coerceAtLeast(0) else 0
@@ -383,6 +401,11 @@ class VideoCompositor(
             outputWidth.toFloat() / outputHeight.toFloat()
         }
         val rect = coverRect(outputWidth.toFloat(), outputHeight.toFloat(), sourceAspect)
+        val quadKey = "${rect.left},${rect.top},${rect.right},${rect.bottom} src=${cameraSourceWidth}x${cameraSourceHeight} rot=$cameraRotation mirror=$cameraMirror"
+        if (quadKey != lastCameraQuad) {
+            Log.i(TAG, "camera quad $quadKey output=${outputWidth}x$outputHeight")
+            lastCameraQuad = quadKey
+        }
 
         GLES20.glDisable(GLES20.GL_BLEND)
         GLES20.glUseProgram(program.id)
@@ -566,11 +589,16 @@ class VideoCompositor(
         right: Float,
         bottom: Float,
         flipY: Boolean,
+        viewWidth: Int = outputWidth,
+        viewHeight: Int = outputHeight,
     ) {
-        val l = left / outputWidth * 2f - 1f
-        val r = right / outputWidth * 2f - 1f
-        val t = 1f - top / outputHeight * 2f
-        val b = 1f - bottom / outputHeight * 2f
+        // Normalize against the viewport currently bound, not always the FBO. The preview
+        // EGL surface is a different size (e.g. 578x325 on a phone) than the 1280x720
+        // render target; normalizing it against the FBO drew the preview into a corner.
+        val l = left / viewWidth * 2f - 1f
+        val r = right / viewWidth * 2f - 1f
+        val t = 1f - top / viewHeight * 2f
+        val b = 1f - bottom / viewHeight * 2f
         positionBuffer.clear()
         positionBuffer.put(floatArrayOf(l, b, r, b, l, t, r, t)).position(0)
         texBuffer.clear()

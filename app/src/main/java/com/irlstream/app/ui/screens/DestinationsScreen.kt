@@ -16,8 +16,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -29,9 +28,6 @@ import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -42,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
@@ -55,12 +52,16 @@ import com.irlstream.app.engine.EngineState
 import com.irlstream.app.ui.AppViewModel
 import com.irlstream.app.ui.components.AppBackground
 import com.irlstream.app.ui.components.ChoiceChip
+import com.irlstream.app.ui.components.DeckToggle
 import com.irlstream.app.ui.components.EmptyState
+import com.irlstream.app.ui.components.Hairline
 import com.irlstream.app.ui.components.IconAction
+import com.irlstream.app.ui.components.InfoBanner
 import com.irlstream.app.ui.components.MicroLabel
 import com.irlstream.app.ui.components.PrimaryButton
 import com.irlstream.app.ui.components.ScreenTopBar
-import com.irlstream.app.ui.components.SectionTitle
+import com.irlstream.app.ui.components.SecondaryButton
+import com.irlstream.app.ui.components.SectionHeader
 import com.irlstream.app.ui.components.SettingSwitchRow
 import com.irlstream.app.ui.components.SheetContent
 import com.irlstream.app.ui.components.StatusDot
@@ -95,48 +96,41 @@ fun DestinationsScreen(vm: AppViewModel, settings: AppSettings, state: EngineSta
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp),
             ) {
-                Spacer(Modifier.height(4.dp))
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = IRL.NeonFaint,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, IRL.Neon.copy(alpha = 0.18f)),
-                ) {
+                Spacer(Modifier.height(8.dp))
+                InfoBanner(
+                    text = "One encode, fanned out to every enabled endpoint. If one service drops, the others keep streaming.",
+                    icon = Icons.Rounded.Podcasts,
+                    color = IRL.Signal,
+                )
+                SectionHeader("01", "Output rack") {
                     Text(
-                        "RealStreamer encodes once and publishes to every enabled destination independently. If one service drops, the others keep streaming.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = IRL.TextSecondary,
-                        modifier = Modifier.padding(13.dp),
+                        "${settings.destinations.count { it.enabled }}/${settings.destinations.size} ENABLED",
+                        style = MonoStyle.copy(fontSize = 8.sp),
+                        color = IRL.TextFaint,
                     )
                 }
-                Spacer(Modifier.height(14.dp))
                 if (settings.destinations.isEmpty()) {
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = IRL.Panel,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, IRL.Line),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        EmptyState(
-                            icon = Icons.Rounded.Podcasts,
-                            title = "Nowhere to stream yet",
-                            body = "Add a Twitch, YouTube, Kick, or custom RTMP/RTMPS endpoint. The full URL includes your stream key.",
-                            actionLabel = "Add destination",
-                            onAction = { editing = Destination() },
-                        )
-                    }
+                    EmptyState(
+                        icon = Icons.Rounded.Podcasts,
+                        title = "Nowhere to stream yet",
+                        body = "Add a Twitch, YouTube, Kick, or custom RTMP/RTMPS endpoint. The full URL includes your stream key.",
+                        actionLabel = "Add destination",
+                        onAction = { editing = Destination() },
+                    )
                 } else {
-                    settings.destinations.forEach { destination ->
+                    settings.destinations.forEachIndexed { index, destination ->
                         val runtime = state.destinations.firstOrNull { it.id == destination.id }
                         DestinationCard(
+                            index = index,
                             destination = destination,
                             runtime = runtime,
                             onClick = { editing = destination },
                             onToggle = { enabled -> vm.setDestinationEnabled(destination.id, enabled) },
                         )
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(8.dp))
                     }
                     Spacer(Modifier.height(6.dp))
-                    PrimaryButton(
+                    SecondaryButton(
                         text = "Add another destination",
                         icon = Icons.Rounded.Add,
                         onClick = { editing = Destination() },
@@ -173,6 +167,7 @@ fun DestinationsScreen(vm: AppViewModel, settings: AppSettings, state: EngineSta
             containerColor = IRL.InkRaised,
             titleContentColor = IRL.Text,
             textContentColor = IRL.TextMuted,
+            shape = CutCornerShape(topEnd = 18.dp),
             title = { Text("Remove destination?") },
             text = { Text("${deleteTarget.displayName} will no longer receive your stream.") },
             confirmButton = {
@@ -192,78 +187,101 @@ fun DestinationsScreen(vm: AppViewModel, settings: AppSettings, state: EngineSta
 
 @Composable
 private fun DestinationCard(
+    index: Int,
     destination: Destination,
     runtime: com.irlstream.app.engine.DestinationRuntime?,
     onClick: () -> Unit,
     onToggle: (Boolean) -> Unit,
 ) {
     val status = runtime?.status ?: if (destination.enabled) DestinationStatus.OFFLINE else DestinationStatus.DISABLED
-    Surface(
-        modifier = Modifier
+    val live = status == DestinationStatus.LIVE
+    val shape = CutCornerShape(topEnd = 14.dp)
+    Column(
+        Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        color = IRL.Panel,
-        border = androidx.compose.foundation.BorderStroke(1.dp, IRL.Line),
-    ) {
-        Column(Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PlatformMark(destination.preset)
-                Spacer(Modifier.width(11.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        destination.displayName,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (destination.enabled) IRL.Text else IRL.TextMuted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    val host = RtmpUrl.parse(destination.url)?.host
-                    Text(
-                        host ?: "No URL yet",
-                        style = MonoStyle.copy(fontSize = 10.sp),
-                        color = IRL.TextFaint,
-                        maxLines = 1,
+            .clip(shape)
+            .background(if (destination.enabled) IRL.Panel else IRL.InkRaised)
+            .border(1.dp, if (live) IRL.Signal.copy(alpha = 0.35f) else IRL.Line, shape)
+            .drawBehind {
+                if (live) {
+                    drawRect(
+                        color = IRL.Signal,
+                        size = androidx.compose.ui.geometry.Size(size.width, 2.dp.toPx()),
                     )
                 }
-                StatusChip(status, runtime?.bitrateKbps ?: 0)
-                Spacer(Modifier.width(8.dp))
-                Switch(
-                    checked = destination.enabled,
-                    onCheckedChange = onToggle,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = IRL.Ink,
-                        checkedTrackColor = IRL.Neon,
-                        uncheckedThumbColor = IRL.TextMuted,
-                        uncheckedTrackColor = IRL.PanelHigh,
-                        uncheckedBorderColor = IRL.LineStrong,
-                    ),
-                )
             }
-            Spacer(Modifier.height(9.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                (index + 1).toString().padStart(2, '0'),
+                style = MonoStyle.copy(fontSize = 9.sp),
+                color = IRL.TextFaint,
+            )
+            Spacer(Modifier.width(7.dp))
+            Box(Modifier.width(1.dp).height(22.dp).background(IRL.LineStrong))
+            Spacer(Modifier.width(8.dp))
+            PlatformMark(destination.preset)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
                 Text(
-                    RtmpUrl.parse(destination.url)?.masked() ?: "Add the full ingest URL and stream key",
-                    style = MonoStyle.copy(fontSize = 10.sp),
-                    color = IRL.TextFaint,
+                    destination.displayName,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (destination.enabled) IRL.Text else IRL.TextMuted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
                 )
-                Spacer(Modifier.width(8.dp))
-                Icon(Icons.Rounded.Edit, null, tint = IRL.TextFaint, modifier = Modifier.size(14.dp))
-            }
-            if (runtime?.status == DestinationStatus.ERROR && !runtime.message.isNullOrBlank()) {
-                Spacer(Modifier.height(6.dp))
+                val host = RtmpUrl.parse(destination.url)?.host
                 Text(
-                    runtime.message,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                    color = IRL.Danger.copy(alpha = 0.85f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                    host ?: "No URL yet",
+                    style = MonoStyle.copy(fontSize = 9.sp),
+                    color = IRL.TextFaint,
+                    maxLines = 1,
                 )
             }
+            Spacer(Modifier.width(6.dp))
+            StatusChip(status, runtime?.bitrateKbps ?: 0)
+            Spacer(Modifier.width(8.dp))
+            DeckToggle(
+                checked = destination.enabled,
+                onCheckedChange = onToggle,
+            )
+        }
+        Spacer(Modifier.height(9.dp))
+        Hairline()
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                RtmpUrl.parse(destination.url)?.masked() ?: "Add the full ingest URL and stream key",
+                style = MonoStyle.copy(fontSize = 9.sp),
+                color = IRL.TextFaint,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "EDIT",
+                style = MicroStyle.copy(fontSize = 8.sp),
+                color = IRL.TextMuted,
+            )
+            Icon(
+                Icons.Rounded.Edit,
+                null,
+                tint = IRL.TextFaint,
+                modifier = Modifier.padding(start = 4.dp).size(12.dp),
+            )
+        }
+        if (runtime?.status == DestinationStatus.ERROR && !runtime.message.isNullOrBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                runtime.message,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                color = IRL.Danger.copy(alpha = 0.85f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -273,40 +291,48 @@ private fun PlatformMark(preset: PlatformPreset) {
     val (letter, color) = when (preset) {
         PlatformPreset.TWITCH -> "T" to IRL.Violet
         PlatformPreset.YOUTUBE -> "Y" to IRL.Danger
-        PlatformPreset.KICK -> "K" to IRL.Neon
+        PlatformPreset.KICK -> "K" to IRL.Signal
         PlatformPreset.CUSTOM -> "R" to IRL.Blue
     }
+    val shape = CutCornerShape(topEnd = 8.dp)
     Box(
         Modifier
-            .size(36.dp)
-            .clip(RoundedCornerShape(11.dp))
-            .background(color.copy(alpha = 0.12f))
-            .border(1.dp, color.copy(alpha = 0.25f), RoundedCornerShape(11.dp)),
+            .size(32.dp)
+            .clip(shape)
+            .background(color.copy(alpha = 0.10f))
+            .border(1.dp, color.copy(alpha = 0.3f), shape),
         contentAlignment = Alignment.Center,
     ) {
-        Text(letter, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = color)
+        Text(
+            letter,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            color = color,
+        )
     }
 }
 
 @Composable
 private fun StatusChip(status: DestinationStatus, bitrateKbps: Int) {
     val (label, color) = when (status) {
-        DestinationStatus.LIVE -> (if (bitrateKbps > 0) String.format(Locale.US, "%.1f Mbps", bitrateKbps / 1000f) else "LIVE") to IRL.Neon
-        DestinationStatus.CONNECTING -> "CONNECTING" to IRL.Warning
-        DestinationStatus.RECONNECTING -> "RETRYING" to IRL.Warning
+        DestinationStatus.LIVE -> (if (bitrateKbps > 0) String.format(Locale.US, "%.1f Mbps", bitrateKbps / 1000f) else "LIVE") to IRL.Signal
+        DestinationStatus.CONNECTING -> "CONNECT" to IRL.Warning
+        DestinationStatus.RECONNECTING -> "RETRY" to IRL.Warning
         DestinationStatus.ERROR -> "ERROR" to IRL.Danger
         DestinationStatus.DISABLED -> "OFF" to IRL.TextFaint
         DestinationStatus.OFFLINE -> "READY" to IRL.TextMuted
     }
+    val shape = CutCornerShape(topEnd = 4.dp)
     Row(
         Modifier
-            .clip(RoundedCornerShape(50))
-            .background(color.copy(alpha = 0.08f))
-            .padding(horizontal = 7.dp, vertical = 4.dp),
+            .height(22.dp)
+            .clip(shape)
+            .background(color.copy(alpha = 0.07f))
+            .border(1.dp, color.copy(alpha = 0.25f), shape)
+            .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StatusDot(status, size = 5)
-        Spacer(Modifier.width(5.dp))
+        Spacer(Modifier.width(4.dp))
         Text(label, style = MicroStyle.copy(fontSize = 7.sp), color = color)
     }
 }
@@ -334,6 +360,8 @@ private fun DestinationEditor(
         title = if (destination.url.isBlank()) "New destination" else "Edit destination",
         subtitle = "Paste the full ingest URL including the stream key.",
     ) {
+        MicroLabel("Platform preset", IRL.TextFaint)
+        Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             PlatformPreset.values().forEach { option ->
                 ChoiceChip(
@@ -451,7 +479,7 @@ private fun DestinationEditor(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(CutCornerShape(topEnd = 8.dp))
                     .clickable(onClick = onDelete)
                     .padding(vertical = 12.dp),
                 horizontalArrangement = Arrangement.Center,

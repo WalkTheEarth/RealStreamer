@@ -2,6 +2,40 @@
 
 All notable changes to RealStreamer. The project follows a simple `MAJOR.MINOR.PATCH` version in `app/build.gradle.kts`.
 
+## 1.0.1 — 2026-10-22
+
+### Added
+
+- **Per-camera built-in selection.** Enumerates every Camera2 camera ID, including multiple rear lenses and duplicate logical cameras, with facing, focal length, and maximum resolution. The choice is saved; the default is the lowest-numbered camera for the selected lens.
+- **Broadcast-deck visual system.** New near-black/acid-signal/magenta-on-air palette, cut-corner panels, hairline rules, square tally lamps, custom faders and toggles, and bundled Barlow / Barlow Condensed / IBM Plex Mono (OFL).
+- **Reworked studio layout.** Program rail with camera chip and resolution; a single slim output/GO LIVE strip; wide layouts move the five transport controls into the streamer console. Portrait previews are capped so the transport stays above the fold.
+- **Redesigned** welcome, destinations, overlays, settings, camera picker, and empty states.
+
+### Fixed
+
+- **Go Live failed on hardware**: `VideoEncoder` called `MediaCodec.start()` before `createInputSurface()`, which is only valid in the Configured state. Every hardware encoder rejected it. The encoder now configures, creates the input surface, then starts.
+- **Black camera preview**: the nested SurfaceView never resolved through the Compose AndroidView layer on a Galaxy S23 FE despite live camera frames and compositor swaps. The preview is now a TextureView; see ADR-0007. The compositor still uses a single render with two blits.
+- **Preview in the lower-left corner**: the preview blit normalized its quad against the 1280x720 FBO instead of the actual preview surface. It now uses the preview EGL width/height.
+- **Sideways/cropped preview**: rotation now uses the physical `DisplayManager` rotation consistently in the camera open path and the display listener, and the compositor keeps a full-frame landscape buffer. The display listener also preserves the correct mirror flag instead of forcing the front-mirror setting onto the rear camera.
+- **Default camera mismatch**: the fallback camera lookup now sorts IDs numerically, matching the first entry shown in the picker.
+
+### Changed
+
+- Preview consumer is a TextureView; ADR-0004 is superseded by ADR-0007.
+- Version 1.0.1 / versionCode 2.
+- Documentation, notices, and the testing checklist updated with the new camera model, preview architecture, font licenses, and on-device evidence.
+
+### Verified on-device
+
+Samsung Galaxy S23 FE (SM-S711B), Android 16, 1080×2340:
+
+- all four exposed cameras listed and switchable;
+- front/rear previews full-size and upright;
+- 28-second local RTMP publish recorded 12.9 MB, probing as H.264 1280×720 + AAC-LC 44.1 kHz mono;
+- live UI showed ON AIR, ~30 fps, ~3.4 Mbps; END returned to preview.
+
+Still needs per-device coverage: UVC hotplug/format negotiation, WebView virtual displays, screen-off streaming on aggressive OEMs, and long multi-destination sessions. See [docs/TESTING.md](docs/TESTING.md).
+
 ## 1.0.0 — 2026-10-22
 
 First complete Android release.

@@ -44,29 +44,28 @@ On first launch you see the welcome screen. Nothing is captured or transmitted u
 ### Studio (landscape / wide)
 
 ```
-┌───────────────────────────────────────────────┬───────────────────────┐
-│  [icon] REALSTREAMER   LIVE/READY   [camera]   │  STREAMER CONSOLE      │
-│                                               │  LOCAL ONLY            │
-│                                               │  ┌─────────────────┐   │
-│              WYSIWYG camera +                 │  │ Chat            │   │
-│              broadcast overlays               │  └─────────────────┘   │
-│                                               │  ┌─────────────────┐   │
-│                                               │  │ FPS / bitrate   │   │
-│  destination pills                            │  │ dropped / uptime│   │
-│  [FLIP] [MIC] [LAYERS] [OUTPUTS] [CONFIG]     │  │ outputs         │   │
-│  [        GO LIVE / END STREAM        ]       │  └─────────────────┘   │
-└───────────────────────────────────────────────┴───────────────────────┘
+┌───────────────────────────────────────────────────────┬──────────────────────────┐
+│ [icon] REALSTREAMER   ■ ON AIR 00:00  [layers][rtmp][gear] │ OPERATOR / LOCAL  [LOCAL ONLY] │
+│ PROGRAM   [camera chip]   1280x720 · 30fps · 3.5 Mbps │ CONSOLE                  │
+│                                                       │ ┌ 01 CHAT ─────────────┐ │
+│            WYSIWYG camera + broadcast overlays        │ │ messages             │ │
+│                                                       │ └──────────────────────┘ │
+│                                                       │ ┌ 02 TELEMETRY ────────┐ │
+│                                                       │ │ FPS / CAM FPS ...    │ │
+│ [01 output pill]                     [ GO LIVE ]      │ └──────────────────────┘ │
+│                                                       │ [FLIP][MIC][LAYERS][OUTPUTS][CONFIG] │
+└───────────────────────────────────────────────────────┴──────────────────────────┘
 ```
 
-- **Top bar**: brand, live/preview badge and timer, camera-source chip, and shortcuts to Overlays, Destinations, and Settings.
+- **Top bar**: brand, live/preview badge and timer, and shortcuts to Overlays, Destinations, and Settings.
+- **Program rail**: the camera chip, the selected resolution/fps/bitrate, and the PROGRAM indicator.
 - **Preview**: exactly what the encoder receives — the camera plus every enabled broadcast layer. Letterboxed to the stream aspect with black bars when the pane is a different shape.
-- **Destination pills**: one per configured destination with a status dot and live bitrate. Tap to manage outputs.
-- **Controls**: flip camera, mute mic, open the overlay editor, open destinations, or open settings. The big button starts/ends the stream.
-- **Streamer console** (right): local-only chat, stats, output status, and audio meter. The **LOCAL ONLY** chip and the note under the header are deliberate: this column is not encoded. The hide (eye) icon collapses it; the layers icon opens the panel configuration.
+- **Bottom strip**: one output pill per destination (status dot and live bitrate) plus the big GO LIVE / END control.
+- **Streamer console** (right): local-only chat, stats, output status, and audio meter. The **LOCAL ONLY** chip and the note under the header are deliberate: this column is not encoded. The hide (eye) icon collapses it; the layers icon opens the panel configuration. On wide layouts the five transport controls (flip, mic, layers, outputs, config) sit at the bottom of this console.
 
 ### Studio (portrait / narrow)
 
-The preview is at the top with the camera chip and destination pills, controls below it, and the streamer console stacked underneath. The whole page scrolls when needed. Portrait streaming is fully supported; the layout simply stacks instead of using a side column.
+The preview is capped at a readable size so the WYSIWYG row, destination pills, and transport card stay above the fold. Below the transport card, the streamer console stacks; scroll for its chat/telemetry panels. Portrait streaming is fully supported; the layout stacks instead of using a side column.
 
 ### Overlays
 
@@ -117,10 +116,10 @@ The stream name may contain slashes and query parameters (e.g. `...?bandwidthtes
 
 ## 6. Choose a camera
 
-Tap the **camera chip** (top bar or above the preview) or go to Settings → Camera.
+Tap the **camera chip** in the program rail (or above the preview in portrait) or go to Settings → Camera.
 
-- **Built-in back camera** — default; best for IRL.
-- **Built-in front camera** — selfie framing, mirrored if the option is on.
+- **Built-in cameras** — every camera ID the phone exposes, listed with its facing, focal length, and maximum size. A multi-lens phone may show a main, ultrawide, telephoto, and duplicate logical cameras; pick the one you want. The selection is saved across launches. The default for a lens is the lowest-numbered matching camera.
+- **FLIP** switches to the first built-in camera with the opposite facing; it is a quick front/back toggle, not the camera picker.
 - **UVC / USB webcam** — any standard USB Video Class camera. Put an action camera in **Webcam mode** first.
 
 When you select a UVC camera and it has not been used before, Android shows a USB permission dialog. Grant it; the device is remembered by vendor/product ID. If you deny it, RealStreamer reports the error and falls back to the built-in camera when the fallback switch is on. Use **Refresh** to rescan after connecting or replugging.
@@ -209,7 +208,7 @@ Audio changes while live are pending until the next stream, except mute, which t
 
 ### Camera
 
-Built-in back/front, UVC device list with refresh, fallback-to-built-in, and mirror-front. See section 6.
+All built-in Camera2 IDs with focal length and maximum size, UVC device list with refresh, fallback-to-built-in, and mirror-front. See section 6.
 
 ### Chat
 
@@ -242,7 +241,7 @@ Version, architecture summary, and third-party acknowledgements.
 
 ### While live
 
-- **Switch cameras** from the camera chip; the stream continues with a brief freeze while the new source opens.
+- **Switch cameras** from the camera chip; choose any built-in ID or UVC device. The stream continues with a brief freeze while the new source opens. FLIP is the quick front/back toggle.
 - **Mute/unmute** instantly from the mic control.
 - **Edit overlays** from any screen; changes are composited immediately.
 - **Add/edit destinations**; each new output connects independently. Disabling one disconnects it without affecting others.
@@ -284,7 +283,7 @@ Version, architecture summary, and third-party acknowledgements.
 
 | Symptom | Check |
 |---|---|
-| Black preview | Camera permission; another app using the camera; USB permission for UVC; logcat `VideoCompositor`, `Camera2Controller`, `UvcController`. |
+| Black preview | Camera permission; another app using the camera; USB permission for UVC. The preview is a TextureView, not a SurfaceView; check logcat `EngineSurface`, `VideoCompositor`, `Camera2Controller`, `UvcController`. |
 | No UVC camera in the list | Camera webcam mode; data-capable cable/adapter; OTG support; USB permission; tap Refresh. |
 | UVC opens then falls back | Camera rejected MJPEG/YUYV at the requested size; try a different cable/hub or camera mode. |
 | Destination stuck RETRYING | URL/key; outbound network; server status; tap the card or console row for the error. |
@@ -292,7 +291,7 @@ Version, architecture summary, and third-party acknowledgements.
 | No chat | Twitch channel spelling; token for restricted channels; custom WS URL/fields; status line. |
 | Stream dies with screen off | Start from the foreground studio; allow notifications; check OEM battery optimization. |
 | Web layer blank | Page blocks embedding/DRM; try an opaque page; check the layer error; test the URL in a browser. |
-| Overlay handles invisible | Device/ROM SurfaceView interop issue; use the layer list controls instead and report it. |
+| Overlay handles invisible | Preview-view interop issue on this ROM; use the layer list controls instead and report the device/ROM. |
 | App won't launch after install | Android version < 8.0; hardware encoder missing; reinstall the matching package. |
 
 Logcat tags: `StreamEngine`, `VideoCompositor`, `VideoEncoder`, `AudioEngine`, `Camera2Controller`, `UvcController`, `WebOverlayManager`, `StreamingService`.

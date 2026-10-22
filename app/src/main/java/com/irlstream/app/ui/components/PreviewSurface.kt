@@ -5,9 +5,9 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.graphics.Color as AndroidColor
+import android.graphics.SurfaceTexture
 import android.view.Surface
-import android.view.SurfaceHolder
-import android.view.SurfaceView
+import android.view.TextureView
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.foundation.Canvas
@@ -27,7 +27,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size as ComposeSize
 import androidx.compose.ui.graphics.Color
@@ -79,9 +78,14 @@ private class PreviewSurfaceRef {
 }
 
 /**
- * A SurfaceView wired to the engine compositor. SurfaceView (unlike TextureView) draws in
- * a layer beneath the window, so normal Compose content can be layered on top of the
- * live preview: controls, labels, and overlay-editing handles.
+ * Preview consumer wired to the engine compositor.
+ *
+ * This deliberately uses a [TextureView], not a SurfaceView. A SurfaceView inside a
+ * Compose AndroidView gets its own window layer and can show black on many devices even
+ * while the compositor is swapping frames (the camera runs, but the hole-punch never
+ * resolves through the Compose render node). A TextureView is drawn as part of the normal
+ * window, so the compositor's EGL output is always visible and Compose content can sit on
+ * top of it. The extra GPU copy is irrelevant at preview resolutions.
  */
 @Composable
 fun EngineSurface(modifier: Modifier = Modifier) {
@@ -91,41 +95,63 @@ fun EngineSurface(modifier: Modifier = Modifier) {
 
     AndroidView(
         factory = { ctx ->
-            // Known Compose interop issue: a SurfaceView returned directly from
-            // AndroidView can make AndroidViewsHandle render black and cover Compose
-            // siblings. Always return a real ViewGroup containing the SurfaceView.
             val container = FrameLayout(ctx)
-            val surfaceView = SurfaceView(ctx).apply {
-                setZOrderOnTop(false)
-                setZOrderMediaOverlay(false)
-                setBackgroundColor(AndroidColor.BLACK)
-                // Compose controls and the overlay editor sit above this view. The
-                // SurfaceView must not consume touch events meant for them.
+            container.setBackgroundColor(AndroidColor.BLACK)
+            val textureView = TextureView(ctx).apply {
+                isOpaque = true
+                addOnLayoutChangeListener { view, left, top, right, bottom, _, _, _, _ ->
+                    android.util.Log.i(
+                        "EngineSurface",
+                        "textureLayout ${right - left}x${bottom - top} at ($left,$top) view=${view.width}x${view.height}",
+                    )
+                }
+                // Compose controls and the overlay editor sit above this view.
                 isClickable = false
                 isFocusable = false
                 isFocusableInTouchMode = false
-                holder.addCallback(object : SurfaceHolder.Callback {
-                    override fun surfaceCreated(holder: SurfaceHolder) {
-                        android.util.Log.i("EngineSurface", "surfaceCreated ${holder.surface} ${holder.surfaceFrame.width()}x${holder.surfaceFrame.height()}")
-                        surfaceRef.surface = holder.surface
-                        engine.attachPreview(holder.surface)
+                surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                    override fun onSurfaceTextureAvailable(
+                        surfaceTexture: SurfaceTexture,
+                        width: Int,
+                        height: Int,
+                    ) {
+                        android.util.Log.i("EngineSurface", "textureAvailable ${width}x$height")
+                        val surface = Surface(surfaceTexture)
+                        surfaceRef.surface = surface
+                        engine.attachPreview(surface)
                         engine.startPreview()
                     }
 
-                    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-                        android.util.Log.i("EngineSurface", "surfaceChanged ${width}x$height format=$format")
-                        engine.onPreviewSurfaceChanged(holder.surface)
+                    override fun onSurfaceTextureSizeChanged(
+                        surfaceTexture: SurfaceTexture,
+                        width: Int,
+                        height: Int,
+                    ) {
+                        android.util.Log.i("EngineSurface", "textureSizeChanged ${width}x$height")
+                        surfaceRef.surface?.takeIf { it.isValid }?.let { engine.onPreviewSurfaceChanged(it) }
                     }
 
-                    override fun surfaceDestroyed(holder: SurfaceHolder) {
-                        android.util.Log.i("EngineSurface", "surfaceDestroyed")
-                        engine.detachPreview(holder.surface)
+                    override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
+                        android.util.Log.i("EngineSurface", "textureDestroyed")
+                        surfaceRef.surface?.let {
+                            engine.detachPreview(it)
+                            it.release()
+                        }
                         surfaceRef.surface = null
+                        return true
                     }
-                })
+
+                    override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) = Unit
+                }
+            }
+            container.addOnLayoutChangeListener { view, left, top, right, bottom, _, _, _, _ ->
+                android.util.Log.i(
+                    "EngineSurface",
+                    "containerLayout ${right - left}x${bottom - top} at ($left,$top) view=${view.width}x${view.height}",
+                )
             }
             container.addView(
-                surfaceView,
+                textureView,
                 FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -152,7 +178,10 @@ fun EngineSurface(modifier: Modifier = Modifier) {
         lifecycle.addObserver(observer)
         onDispose {
             lifecycle.removeObserver(observer)
-            surfaceRef.surface?.let { engine.detachPreview(it) }
+            surfaceRef.surface?.let {
+                engine.detachPreview(it)
+                it.release()
+            }
             surfaceRef.surface = null
         }
     }
@@ -282,12 +311,11 @@ private fun OverlayEditorLayer(
             val boxSize = ComposeSize(rect.width * size.width, rect.height * size.height)
             val selected = source.id == selectedId
             if (selected) {
-                drawRoundRect(
-                    color = IRL.Neon,
+                drawRect(
+                    color = IRL.Signal,
                     topLeft = topLeft,
                     size = boxSize,
-                    cornerRadius = CornerRadius(10.dp.toPx()),
-                    style = Stroke(width = 2.dp.toPx()),
+                    style = Stroke(width = 1.5.dp.toPx()),
                 )
                 val handles = listOf(
                     Offset(topLeft.x, topLeft.y),
@@ -295,16 +323,24 @@ private fun OverlayEditorLayer(
                     Offset(topLeft.x, topLeft.y + boxSize.height),
                     Offset(topLeft.x + boxSize.width, topLeft.y + boxSize.height),
                 )
+                val handleSize = 7.dp.toPx()
                 handles.forEach { point ->
-                    drawCircle(IRL.Neon, radius = 4.5.dp.toPx(), center = point)
-                    drawCircle(IRL.Ink, radius = 2.dp.toPx(), center = point)
+                    drawRect(
+                        color = IRL.Signal,
+                        topLeft = Offset(point.x - handleSize / 2f, point.y - handleSize / 2f),
+                        size = ComposeSize(handleSize, handleSize),
+                    )
+                    drawRect(
+                        color = IRL.Ink,
+                        topLeft = Offset(point.x - handleSize / 4f, point.y - handleSize / 4f),
+                        size = ComposeSize(handleSize / 2f, handleSize / 2f),
+                    )
                 }
             } else {
-                drawRoundRect(
+                drawRect(
                     color = if (source.enabled) Color.White.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.15f),
                     topLeft = topLeft,
                     size = boxSize,
-                    cornerRadius = CornerRadius(10.dp.toPx()),
                     style = Stroke(width = 1.dp.toPx(), pathEffect = dash),
                 )
             }

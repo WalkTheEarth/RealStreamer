@@ -8,6 +8,14 @@ Not built. The repository is an Android app; the intended port path is documente
 
 Yes, as a **generic UVC webcam**. Put the Action 4 in Webcam/USB mode and connect it with a data-capable cable/adapter. There is no DJI-specific code or SDK. Audio comes from the phone microphone, not the camera.
 
+### Can I choose a specific rear or front camera?
+
+Yes. RealStreamer enumerates every camera the Android camera service exposes, including multiple rear lenses and duplicate logical cameras. The camera sheet and Settings → Camera list each ID with its focal length and maximum resolution. Pick one; the selection is saved. The default for a lens is the lowest camera ID that faces that way. The FLIP control still toggles between front and back.
+
+### The preview is wider or narrower after switching cameras. Why?
+
+The phone may expose a main, ultrawide, telephoto, or depth-adjacent camera as separate IDs. Each has a different field of view; RealStreamer center-crops the sensor frame to the selected stream aspect, so the field of view changes with the lens even though the output resolution does not.
+
 ### Can I stream to Twitch, YouTube, and Kick at the same time?
 
 Yes. Add each destination with its full ingest URL and key. One encode is fanned out to independent connections. Keep in mind that each destination consumes its own upload bandwidth, and check each platform's simulcasting rules.
@@ -26,7 +34,7 @@ No. The streamer console is Compose UI. The compositor only reads `scene.broadca
 
 ### Can viewers see the overlay selection boxes?
 
-No. Those handles are Compose UI above the preview SurfaceView, not compositor layers.
+No. Those handles are Compose UI above the preview TextureView, not compositor layers.
 
 ### Can I add chat to the stream and also have a private chat reader?
 
@@ -94,7 +102,7 @@ Yes. Scene/overlay/camera/chat/destination changes apply immediately. Video/audi
 
 ### The overlay handles don't appear on my device.
 
-Compose content over a SurfaceView is standard, but some ROMs/GPU drivers behave differently. The layer list still allows selection, reorder, visibility, and property editing. Please add the device/ROM to the testing notes.
+The preview is a TextureView precisely because SurfaceView interop was unreliable on some ROMs. If handles still do not appear, the layer list still allows selection, reorder, visibility, and property editing. Please add the device/ROM to the testing notes.
 
 ### The web source is blank.
 
