@@ -12,6 +12,10 @@ Yes, as a **generic UVC webcam**. Put the Action 4 in Webcam/USB mode and connec
 
 Yes. RealStreamer enumerates every camera the Android camera service exposes, including multiple rear lenses and duplicate logical cameras. The camera sheet and Settings → Camera list each ID with its focal length and maximum resolution. Pick one; the selection is saved. The default for a lens is the lowest camera ID that faces that way. The FLIP control still toggles between front and back.
 
+### The image is upside down or sideways. How do I fix it?
+
+Open the camera chip → **Camera adjustment**. Choose **180°** for an upside-down image or **90°/270°** for a sideways one. **Mirror image** flips the current camera horizontally. **Framing → Fit** (the default) shows the whole rotated frame and letterboxes it instead of cropping; **Fill** crops the edges to fill the program. If the rotated camera is portrait and you want it full-screen, set the video format to 9:16 (Settings → Video). The offset is applied after the automatic sensor/display correction, updates the preview and broadcast live without reopening the camera, and is saved. The same controls are in Settings → Camera. Use **Reset** to return to automatic orientation.
+
 ### The preview is wider or narrower after switching cameras. Why?
 
 The phone may expose a main, ultrawide, telephoto, or depth-adjacent camera as separate IDs. Each has a different field of view; RealStreamer center-crops the sensor frame to the selected stream aspect, so the field of view changes with the lens even though the output resolution does not.

@@ -2,6 +2,19 @@
 
 All notable changes to RealStreamer. The project follows a simple `MAJOR.MINOR.PATCH` version in `app/build.gradle.kts`.
 
+## 1.0.2 — 2026-10-22
+
+### Added
+
+- **Camera adjustment**: the camera sheet and Settings → Camera now expose a 0°/90°/180°/270° rotation offset, a manual horizontal mirror, and **Fit / Fill** framing. Use 180° for an upside-down image, 90°/270° for a sideways one. Changes apply live to the preview and encoded stream without reopening the sensor, and are persisted.
+- **Fit** is the default: it shows the whole camera frame and letterboxes when the rotated frame's aspect differs from the program. **Fill** crops the edges to cover the program. Fit prevents a 90°/270° rotation from looking zoomed or stretched.
+- Reset action clears the manual rotation and mirror.
+
+### Fixed
+
+- The “Mirror front camera” toggle was being overridden by the sensor’s front flag after the camera opened. The engine now applies the setting (plus the manual mirror) to the live compositor transform.
+- Camera transform-only changes no longer restart the camera; source changes still reopen it.
+
 ## 1.0.1 — 2026-10-22
 
 ### Added

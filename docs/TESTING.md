@@ -96,6 +96,10 @@ Mark each item after the first install. Use `adb logcat -s StreamEngine EngineSu
 - [ ] Rotating the phone 180° in landscape keeps the image upright (display listener).
 - [ ] Switching resolution (720p30 → 1080p30 → 9:16) reflows the preview and restarts the camera.
 - [ ] The preview aspect matches the configured stream; no stretching and no unexpected hard crop (a deliberately wider lens may show a wider field of view).
+- [ ] Camera adjustment: 0/90/180/270 rotation changes the preview immediately without reopening the sensor; the encoded frame matches.
+- [ ] Mirror image flips the live preview and the encoded frame; Reset clears both controls.
+- [ ] Framing: Fit letterboxes a portrait rotated frame without cropping; Fill covers the frame. Switching updates preview and encoder live.
+- [ ] Rotation/mirror persist across a force-stop and relaunch, and apply to UVC as well.
 - [ ] WYSIWYG check: record one destination with FFmpeg and compare the recorded frame with the in-app preview (position of overlays, colors, crop).
 
 ### UVC

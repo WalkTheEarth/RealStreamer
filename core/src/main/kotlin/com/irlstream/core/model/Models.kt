@@ -60,6 +60,15 @@ data class CameraSettings(
     /** Stable key of a UVC device; null means "first / only connected camera". */
     val uvcDeviceKey: String? = null,
     val mirrorFrontCamera: Boolean = true,
+    /** Extra clockwise rotation after automatic sensor correction: 0, 90, 180, 270. */
+    val rotationOffsetDegrees: Int = 0,
+    /** Flip the current camera horizontally, on top of the front-camera default. */
+    val mirrorImage: Boolean = false,
+    /**
+     * Keep the whole camera frame (letterboxed) instead of cropping it to fill the
+     * program frame. Fit is the default so a manual 90°/270° rotation never zooms.
+     */
+    val fitCamera: Boolean = true,
     /** Auto-fallback to the built-in camera if the UVC device disappears. */
     val fallbackToBuiltIn: Boolean = true,
 )

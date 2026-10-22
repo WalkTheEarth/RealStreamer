@@ -135,7 +135,8 @@ The preview `Surface` is still a normal EGL window surface; only the consumer vi
 
 - The camera buffer is usually landscape. `Camera2Controller` computes `(sensorOrientation ∓ displayRotation)` (front cameras use the mirrored direction) from the **physical display rotation**. The compositor rotates UVs 0/90/180/270 and optionally mirrors U before applying the `SurfaceTexture` matrix.
 - Do not confuse `context.display.rotation` with the physical display rotation. On a fixed-landscape activity the former can report 0 while the panel is rotated 90°, which makes a landscape sensor buffer look portrait and crops it hard. The controller and the display listener both use the `DisplayManager` physical rotation.
-- The camera is cover-fitted: if the sensor aspect differs from the canvas, edges are cropped, never stretched.
+- A persisted manual adjustment adds an offset rotation (0/90/180/270) and an optional horizontal mirror after the automatic correction. It is applied by updating the compositor source info, not by reopening the camera, so the preview and encoder turn immediately.
+- The camera uses **Fit** by default: if the sensor/rotated aspect differs from the canvas, the frame is letterboxed, never stretched. **Fill** switches to cover-cropping when the operator wants an edge-to-edge frame. Fit avoids a hard crop after a 90°/270° manual rotation.
 - A `DisplayManager` listener updates the built-in camera's UV rotation when the device flips between the two landscape (or portrait) orientations, without restarting the camera. It uses the same rotation source as `Camera2Controller.open`; mixing sources caused a one-frame overwrite to a sideways transform after every camera open.
 - The stream orientation is fixed by the video settings and the activity is locked to it for WYSIWYG framing.
 

@@ -114,13 +114,24 @@ The stream name may contain slashes and query parameters (e.g. `...?bandwidthtes
 
 ---
 
-## 6. Choose a camera
+## 6. Choose and adjust a camera
 
 Tap the **camera chip** in the program rail (or above the preview in portrait) or go to Settings → Camera.
 
 - **Built-in cameras** — every camera ID the phone exposes, listed with its facing, focal length, and maximum size. A multi-lens phone may show a main, ultrawide, telephoto, and duplicate logical cameras; pick the one you want. The selection is saved across launches. The default for a lens is the lowest-numbered matching camera.
 - **FLIP** switches to the first built-in camera with the opposite facing; it is a quick front/back toggle, not the camera picker.
 - **UVC / USB webcam** — any standard USB Video Class camera. Put an action camera in **Webcam mode** first.
+
+### Camera adjustment
+
+The camera sheet's **Camera adjustment** section (also in Settings → Camera) has:
+
+- **Rotation** — 0°, 90°, 180°, or 270°, applied after the automatic sensor/display correction. If the image is upside down, choose **180°**. If it is sideways, try 90° or 270°.
+- **Framing** — **Fit** (default) shows the whole camera frame and letterboxes it when the rotated frame is portrait against a landscape program. **Fill** crops the edges to fill the frame. After a 90°/270° rotation, Fit avoids the zoomed/stretched look; Fill is available when you want an edge-to-edge crop. For a full-frame portrait camera, choose the 9:16 video format in Settings → Video so the program itself is portrait.
+- **Mirror image** — flips the current camera horizontally. This works for built-in and UVC cameras and is separate from the front-camera selfie default.
+- **Reset** — clears the manual rotation and mirror.
+
+Changes apply immediately to both the preview and the outgoing stream; the camera does not restart. They are saved across launches. The same controls are available in Settings → Camera.
 
 When you select a UVC camera and it has not been used before, Android shows a USB permission dialog. Grant it; the device is remembered by vendor/product ID. If you deny it, RealStreamer reports the error and falls back to the built-in camera when the fallback switch is on. Use **Refresh** to rescan after connecting or replugging.
 
@@ -208,7 +219,7 @@ Audio changes while live are pending until the next stream, except mute, which t
 
 ### Camera
 
-All built-in Camera2 IDs with focal length and maximum size, UVC device list with refresh, fallback-to-built-in, and mirror-front. See section 6.
+All built-in Camera2 IDs with focal length and maximum size, manual rotation/mirror adjustment, UVC device list with refresh, fallback-to-built-in, and mirror-front. See section 6.
 
 ### Chat
 
@@ -241,7 +252,7 @@ Version, architecture summary, and third-party acknowledgements.
 
 ### While live
 
-- **Switch cameras** from the camera chip; choose any built-in ID or UVC device. The stream continues with a brief freeze while the new source opens. FLIP is the quick front/back toggle.
+- **Switch cameras** from the camera chip; choose any built-in ID or UVC device. The stream continues with a brief freeze while the new source opens. FLIP is the quick front/back toggle. Rotation/mirror changes apply without reopening the camera.
 - **Mute/unmute** instantly from the mic control.
 - **Edit overlays** from any screen; changes are composited immediately.
 - **Add/edit destinations**; each new output connects independently. Disabling one disconnects it without affecting others.
@@ -284,6 +295,7 @@ Version, architecture summary, and third-party acknowledgements.
 | Symptom | Check |
 |---|---|
 | Black preview | Camera permission; another app using the camera; USB permission for UVC. The preview is a TextureView, not a SurfaceView; check logcat `EngineSurface`, `VideoCompositor`, `Camera2Controller`, `UvcController`. |
+| Upside-down or sideways preview | Open the camera chip → Camera adjustment; choose 180° (upside down) or 90°/270° (sideways). Set Framing to Fit (default) to see the whole frame without a hard crop; Fill crops to cover. Reset returns to automatic orientation. |
 | No UVC camera in the list | Camera webcam mode; data-capable cable/adapter; OTG support; USB permission; tap Refresh. |
 | UVC opens then falls back | Camera rejected MJPEG/YUYV at the requested size; try a different cable/hub or camera mode. |
 | Destination stuck RETRYING | URL/key; outbound network; server status; tap the card or console row for the error. |

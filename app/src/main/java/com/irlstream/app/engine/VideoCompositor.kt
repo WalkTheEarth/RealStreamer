@@ -68,6 +68,7 @@ class VideoCompositor(
     private var cameraSourceHeight = 0
     private var cameraRotation = 0
     private var cameraMirror = false
+    private var cameraFit = true
 
     private var scene: Scene = Scene()
     private var content: OverlayContent = OverlayContent()
@@ -186,12 +187,19 @@ class VideoCompositor(
         epochNanos = nanos
     }
 
-    fun setCameraSourceInfo(width: Int, height: Int, rotationDegrees: Int, mirror: Boolean) {
+    fun setCameraSourceInfo(
+        width: Int,
+        height: Int,
+        rotationDegrees: Int,
+        mirror: Boolean,
+        fit: Boolean = true,
+    ) {
         glHandler.post {
             cameraSourceWidth = width
             cameraSourceHeight = height
             cameraRotation = rotationDegrees
             cameraMirror = mirror
+            cameraFit = fit
         }
     }
 
@@ -400,8 +408,16 @@ class VideoCompositor(
         } else {
             outputWidth.toFloat() / outputHeight.toFloat()
         }
-        val rect = coverRect(outputWidth.toFloat(), outputHeight.toFloat(), sourceAspect)
-        val quadKey = "${rect.left},${rect.top},${rect.right},${rect.bottom} src=${cameraSourceWidth}x${cameraSourceHeight} rot=$cameraRotation mirror=$cameraMirror"
+        val rect = if (cameraFit) {
+            containedRect(
+                RectF(0f, 0f, outputWidth.toFloat(), outputHeight.toFloat()),
+                sourceAspect,
+            )
+        } else {
+            coverRect(outputWidth.toFloat(), outputHeight.toFloat(), sourceAspect)
+        }
+        val quadKey = "${rect.left},${rect.top},${rect.right},${rect.bottom} src=${cameraSourceWidth}x${cameraSourceHeight} " +
+            "rot=$cameraRotation mirror=$cameraMirror fit=$cameraFit"
         if (quadKey != lastCameraQuad) {
             Log.i(TAG, "camera quad $quadKey output=${outputWidth}x$outputHeight")
             lastCameraQuad = quadKey

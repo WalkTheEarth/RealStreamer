@@ -176,9 +176,22 @@ class StreamEngine private constructor(
             refreshContent()
         }
 
-        if (old.camera != newSettings.camera) {
+        val cameraSourceChanged = old.camera.kind != newSettings.camera.kind ||
+            old.camera.lens != newSettings.camera.lens ||
+            old.camera.cameraId != newSettings.camera.cameraId ||
+            old.camera.uvcDeviceKey != newSettings.camera.uvcDeviceKey ||
+            old.camera.fallbackToBuiltIn != newSettings.camera.fallbackToBuiltIn
+        val cameraTransformChanged = old.camera.rotationOffsetDegrees != newSettings.camera.rotationOffsetDegrees ||
+            old.camera.mirrorImage != newSettings.camera.mirrorImage ||
+            old.camera.mirrorFrontCamera != newSettings.camera.mirrorFrontCamera ||
+            old.camera.fitCamera != newSettings.camera.fitCamera
+        if (cameraSourceChanged) {
             uvcAttempted = false
             if (previewStarted) openCamera()
+        } else if (cameraTransformChanged) {
+            // Rotation/mirror changes must not restart the sensor; update the compositor
+            // transform in place so the preview and encoder turn immediately.
+            updateCameraTransform()
         }
 
         if (old.video != newSettings.video) {
@@ -468,11 +481,13 @@ class StreamEngine private constructor(
                 .firstOrNull { it.id == settings.camera.cameraId }
                 ?.facing
                 ?: settings.camera.lens
+            val initialMirror = (selectedFacing == LensFacing.FRONT && settings.camera.mirrorFrontCamera) xor
+                settings.camera.mirrorImage
             c.provideCameraTexture(
                 video.width,
                 video.height,
-                0,
-                selectedFacing == LensFacing.FRONT && settings.camera.mirrorFrontCamera,
+                settings.camera.rotationOffsetDegrees,
+                initialMirror,
             ) { st ->
                 Log.i(TAG, "camera texture ready gen=$gen st=$st")
                 if (gen != cameraGeneration) return@provideCameraTexture
@@ -489,7 +504,7 @@ class StreamEngine private constructor(
                     currentCameraKind = CameraKind.BUILT_IN
                     connectedUvc = null
                     builtInCamera = info
-                    c.setCameraSourceInfo(info.width, info.height, info.rotationDegrees, info.mirror)
+                    applyBuiltInTransform(info)
                     _state.update {
                         it.copy(
                             cameraLabel = info.label,
@@ -592,6 +607,10 @@ class StreamEngine private constructor(
     private fun updateBuiltInRotation() {
         if (currentCameraKind != CameraKind.BUILT_IN) return
         val info = builtInCamera ?: return
+        applyBuiltInTransform(info)
+    }
+
+    private fun applyBuiltInTransform(info: Camera2Controller.Info) {
         // Use the same display source as Camera2Controller.open. DisplayManager can
         // report a different rotation than the activity's display while the app is
         // locked to landscape, which previously overwrote a correct camera transform
@@ -599,7 +618,43 @@ class StreamEngine private constructor(
         val rotation = camera2?.currentDisplayRotationDegrees() ?: 0
         val front = info.facing == android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT
         val relative = Camera2Controller.relativeRotation(info.sensorOrientation, rotation, front)
-        compositor?.setCameraSourceInfo(info.width, info.height, relative, info.mirror)
+        compositor?.setCameraSourceInfo(
+            info.width,
+            info.height,
+            effectiveCameraRotation(relative),
+            effectiveCameraMirror(info.mirror),
+            settings.camera.fitCamera,
+        )
+    }
+
+    private fun updateCameraTransform() {
+        when (currentCameraKind) {
+            CameraKind.BUILT_IN -> updateBuiltInRotation()
+            CameraKind.USB_UVC -> connectedUvc?.let { info ->
+                val active = activeVideo()
+                val base = if ((active.height > active.width) != (info.height > info.width)) 90 else 0
+                compositor?.setCameraSourceInfo(
+                    info.width,
+                    info.height,
+                    effectiveCameraRotation(base),
+                    effectiveCameraMirror(false),
+                    settings.camera.fitCamera,
+                )
+            }
+            else -> Unit
+        }
+    }
+
+    private fun effectiveCameraRotation(autoRotation: Int): Int {
+        val total = autoRotation + settings.camera.rotationOffsetDegrees
+        return ((total % 360) + 360) % 360
+    }
+
+    private fun effectiveCameraMirror(autoMirror: Boolean): Boolean {
+        // The sensor is mirrored for front cameras. mirrorFrontCamera is the default
+        // selfie flip; mirrorImage is an explicit manual flip that also covers UVC.
+        val frontDefault = autoMirror && settings.camera.mirrorFrontCamera
+        return frontDefault xor settings.camera.mirrorImage
     }
 
     // -----------------------------------------------------------------------
@@ -636,11 +691,7 @@ class StreamEngine private constructor(
             currentCameraKind = CameraKind.USB_UVC
             connectedUvc = info
             builtInCamera = null
-            val active = activeVideo()
-            val outputPortrait = active.height > active.width
-            val sourcePortrait = info.height > info.width
-            val rotation = if (outputPortrait != sourcePortrait) 90 else 0
-            compositor?.setCameraSourceInfo(info.width, info.height, rotation, false)
+            updateCameraTransform()
             _state.update {
                 it.copy(
                     cameraLabel = info.label,

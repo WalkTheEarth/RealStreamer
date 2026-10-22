@@ -54,7 +54,7 @@ The repository's development environment used a local `.tooling/sdk`; that direc
 keytool -genkey -v -keystore realstreamer.jks -keyalg RSA -keysize 2048 -validity 10000 -alias realstreamer
 ./gradlew :app:assembleRelease
 apksigner sign --ks realstreamer.jks \
-  --out RealStreamer-1.0.1.apk \
+  --out RealStreamer-1.0.2.apk \
   app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 

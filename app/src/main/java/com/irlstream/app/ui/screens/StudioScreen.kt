@@ -1385,7 +1385,61 @@ private fun CameraPickerSheet(
         title = "Camera source",
         subtitle = "Use the built-in cameras or any UVC webcam connected over USB.",
     ) {
-        SectionHeader("01", "Built-in cameras") {
+        SectionHeader("01", "Camera adjustment") {
+            Text(
+                "RESET",
+                style = MicroStyle.copy(fontSize = 8.sp),
+                color = IRL.Signal,
+                modifier = Modifier
+                    .clickable {
+                        vm.updateCamera {
+                            it.copy(rotationOffsetDegrees = 0, mirrorImage = false)
+                        }
+                    }
+                    .padding(horizontal = 4.dp, vertical = 3.dp),
+            )
+        }
+        MicroLabel("Rotation", IRL.TextMuted)
+        Spacer(Modifier.height(7.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(0, 90, 180, 270).forEach { degrees ->
+                ChoiceChip(
+                    text = "$degrees°",
+                    selected = settings.camera.rotationOffsetDegrees == degrees,
+                    onClick = {
+                        vm.updateCamera { it.copy(rotationOffsetDegrees = degrees) }
+                    },
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Use 180° when the image is upside down. Rotation and mirror apply live to the preview and the broadcast.",
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+            color = IRL.TextFaint,
+        )
+        Spacer(Modifier.height(8.dp))
+        MicroLabel("Framing", IRL.TextMuted)
+        Spacer(Modifier.height(7.dp))
+        Segmented(
+            options = listOf("Fit", "Fill"),
+            selected = if (settings.camera.fitCamera) "Fit" else "Fill",
+            onSelect = { choice -> vm.updateCamera { it.copy(fitCamera = choice == "Fit") } },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Fit keeps the whole camera frame, letterboxed when its aspect differs. Fill crops the edges to fill the program. For a full-frame portrait camera after a 90°/270° rotation, choose a 9:16 video format in Settings → Video.",
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+            color = IRL.TextFaint,
+        )
+        SettingSwitchRow(
+            title = "Mirror image",
+            subtitle = "Flip the current camera horizontally. Works for built-in and UVC.",
+            checked = settings.camera.mirrorImage,
+            onCheckedChange = { enabled -> vm.updateCamera { it.copy(mirrorImage = enabled) } },
+        )
+        SectionHeader("02", "Built-in cameras") {
             Text(
                 "${state.builtInCameras.size} FOUND",
                 style = MonoStyle.copy(fontSize = 8.sp),
@@ -1413,7 +1467,7 @@ private fun CameraPickerSheet(
                 Spacer(Modifier.height(6.dp))
             }
         }
-        SectionHeader("02", "UVC / USB webcam") {
+        SectionHeader("03", "UVC / USB webcam") {
             Text(
                 "REFRESH",
                 style = MicroStyle.copy(fontSize = 8.sp),
@@ -1450,7 +1504,7 @@ private fun CameraPickerSheet(
         )
         SettingSwitchRow(
             title = "Mirror front camera",
-            subtitle = "Flip the preview for selfie framing",
+            subtitle = "Default selfie mirror for the front camera",
             checked = settings.camera.mirrorFrontCamera,
             onCheckedChange = { enabled -> vm.updateCamera { it.copy(mirrorFrontCamera = enabled) } },
         )

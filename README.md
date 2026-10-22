@@ -34,7 +34,7 @@ This repository builds and ships a complete Android app:
 | Multiple RTMP destinations from a single encode | ✅ |
 | RTMPS / TLS ingest | ✅ (implemented; local end-to-end test uses plain RTMP) |
 | Independent reconnect, backoff, queueing, and keyframe gating per destination | ✅ |
-| Built-in Camera2 with every exposed camera ID, zoom, stabilization | ✅ |
+| Built-in Camera2 with every exposed camera ID, zoom, stabilization, manual rotation/mirror | ✅ |
 | Generic UVC webcam support (USB Video Class, no vendor code) | ✅ |
 | UVC hotplug, USB permission flow, fallback to built-in camera | ✅ |
 | WYSIWYG GPU compositor (preview is the exact encoded frame) | ✅ |
@@ -106,7 +106,7 @@ adb shell am start -n com.irlstream.app.debug/com.irlstream.app.MainActivity
 # 3) release build (unsigned; sign before installing)
 ./gradlew :app:assembleRelease
 apksigner sign --ks your-release.jks \
-  --out RealStreamer-1.0.1.apk \
+  --out RealStreamer-1.0.2.apk \
   app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
@@ -125,7 +125,7 @@ The vendored UVC AAR in `app/libs/` contains only `arm64-v8a` and `armeabi-v7a` 
    - Custom: any `rtmp://` or `rtmps://` URL; the stream name is everything after the app path.
    Add as many as you want. Each destination gets its own connection.
 2. **Open the studio.** Grant camera and microphone access. The preview is the broadcast frame.
-3. **Choose a camera.** Tap the camera chip in the program rail. Pick any built-in camera the phone exposes (front, main rear, ultrawide, tele, etc.) or a UVC device. Put an action camera in **Webcam / UVC mode** and it will appear in the list.
+3. **Choose and adjust a camera.** Tap the camera chip in the program rail. Pick any built-in camera the phone exposes (front, main rear, ultrawide, tele, etc.) or a UVC device. Put an action camera in **Webcam / UVC mode** and it will appear in the list. If the image is upside down, open the same sheet → **Camera adjustment** → **180°**. Rotation, mirror, and **Fit/Fill** framing apply live to the preview and stream; Fit shows the whole frame without cropping.
 4. **Add overlays.** Open **Overlays → On stream**. Add text, chat, stats, a web source, or an image. Drag the box on the preview to move it; drag the bottom-right handle to resize.
 5. **Add streamer-only panels.** **Overlays → Streamer only** adds chat, stats, outputs, and audio meter to the Studio sidebar. These are never encoded.
 6. **Go live.** The big GO LIVE button starts the encoder, the foreground service, and every enabled destination. The notification has an **End stream** action. You can turn the screen off and keep streaming.
