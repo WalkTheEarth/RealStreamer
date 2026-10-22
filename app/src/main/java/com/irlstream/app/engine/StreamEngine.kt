@@ -124,6 +124,9 @@ class StreamEngine private constructor(
     private val webFallbacks = HashMap<String, Bitmap>()
     private val imageKeys = HashMap<String, String>()
 
+    private var lastCameraFrameCount = -1L
+    private var lastCameraFrameChangeAt = 0L
+    private var cameraNoFrameReported = false
     private var lastContentRefresh = 0L
     private var contentRefreshPending = false
     private var serviceStarted = false
@@ -235,6 +238,16 @@ class StreamEngine private constructor(
         compositor?.setPreviewSurface(surface)
         _state.update { it.copy(previewAttached = true) }
         startPreviewIfReady()
+    }
+
+    /**
+     * Some devices need the EGL window surface recreated when the SurfaceView's
+     * buffer geometry changes.
+     */
+    fun onPreviewSurfaceChanged(surface: Surface) {
+        if (previewSurface !== surface || compositor == null) return
+        compositor?.setPreviewSurface(null)
+        compositor?.setPreviewSurface(surface)
     }
 
     fun detachPreview(surface: Surface? = null) {
@@ -379,17 +392,31 @@ class StreamEngine private constructor(
     // -----------------------------------------------------------------------
 
     private fun openCamera() {
-        val c = compositor ?: return
-        if (!previewStarted) return
+        val c = compositor ?: run {
+            Log.w(TAG, "openCamera: no compositor")
+            return
+        }
+        if (!previewStarted) {
+            Log.w(TAG, "openCamera: preview not started")
+            return
+        }
         // While live, the camera can be switched even if the preview Surface is not
         // attached (for example from the Settings screen); the encoder keeps receiving
         // frames from the compositor.
-        if (previewSurface == null && !_state.value.isLive) return
+        if (previewSurface == null && !_state.value.isLive) {
+            Log.w(TAG, "openCamera: no preview surface")
+            return
+        }
         if (!hasPermission(Manifest.permission.CAMERA)) {
+            Log.w(TAG, "openCamera: camera permission missing")
             postError("Camera permission is required")
             return
         }
         val gen = ++cameraGeneration
+        lastCameraFrameCount = -1L
+        lastCameraFrameChangeAt = SystemClock.elapsedRealtime()
+        cameraNoFrameReported = false
+        Log.i(TAG, "openCamera gen=$gen kind=${settings.camera.kind} lens=${settings.camera.lens} devices=${_state.value.uvcDevices.size} surface=$previewSurface")
         cameraOpening = true
         camera2?.close()
         uvc?.closeAndWait()
@@ -441,6 +468,7 @@ class StreamEngine private constructor(
                 0,
                 settings.camera.mirrorFrontCamera,
             ) { st ->
+                Log.i(TAG, "camera texture ready gen=$gen st=$st")
                 if (gen != cameraGeneration) return@provideCameraTexture
                 camera2?.open(
                     lens = settings.camera.lens,
@@ -1075,6 +1103,24 @@ class StreamEngine private constructor(
                 )
             }
             if (compositor != null) refreshContent()
+            checkCameraFrames()
+        }
+    }
+
+    private fun checkCameraFrames() {
+        if (!previewStarted && !_state.value.isLive) return
+        if (currentCameraKind == null) return
+        val count = compositor?.cameraFrameCount() ?: return
+        val now = SystemClock.elapsedRealtime()
+        if (count != lastCameraFrameCount) {
+            lastCameraFrameCount = count
+            lastCameraFrameChangeAt = now
+            cameraNoFrameReported = false
+            return
+        }
+        if (now - lastCameraFrameChangeAt > 5_000 && !cameraNoFrameReported) {
+            cameraNoFrameReported = true
+            postError("Camera is open but no frames are arriving. Try reselecting the camera or replugging the USB cable.")
         }
     }
 

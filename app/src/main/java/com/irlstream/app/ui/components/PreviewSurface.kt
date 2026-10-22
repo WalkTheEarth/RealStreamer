@@ -8,6 +8,8 @@ import android.graphics.Color as AndroidColor
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -24,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size as ComposeSize
@@ -88,7 +91,11 @@ fun EngineSurface(modifier: Modifier = Modifier) {
 
     AndroidView(
         factory = { ctx ->
-            SurfaceView(ctx).apply {
+            // Known Compose interop issue: a SurfaceView returned directly from
+            // AndroidView can make AndroidViewsHandle render black and cover Compose
+            // siblings. Always return a real ViewGroup containing the SurfaceView.
+            val container = FrameLayout(ctx)
+            val surfaceView = SurfaceView(ctx).apply {
                 setZOrderOnTop(false)
                 setZOrderMediaOverlay(false)
                 setBackgroundColor(AndroidColor.BLACK)
@@ -99,21 +106,34 @@ fun EngineSurface(modifier: Modifier = Modifier) {
                 isFocusableInTouchMode = false
                 holder.addCallback(object : SurfaceHolder.Callback {
                     override fun surfaceCreated(holder: SurfaceHolder) {
+                        android.util.Log.i("EngineSurface", "surfaceCreated ${holder.surface} ${holder.surfaceFrame.width()}x${holder.surfaceFrame.height()}")
                         surfaceRef.surface = holder.surface
                         engine.attachPreview(holder.surface)
                         engine.startPreview()
                     }
 
-                    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = Unit
+                    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+                        android.util.Log.i("EngineSurface", "surfaceChanged ${width}x$height format=$format")
+                        engine.onPreviewSurfaceChanged(holder.surface)
+                    }
 
                     override fun surfaceDestroyed(holder: SurfaceHolder) {
+                        android.util.Log.i("EngineSurface", "surfaceDestroyed")
                         engine.detachPreview(holder.surface)
                         surfaceRef.surface = null
                     }
                 })
             }
+            container.addView(
+                surfaceView,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+            container
         },
-        modifier = modifier,
+        modifier = modifier.clipToBounds(),
     )
 
     DisposableEffect(lifecycle) {

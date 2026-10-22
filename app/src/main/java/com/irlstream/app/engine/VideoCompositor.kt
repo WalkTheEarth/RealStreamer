@@ -82,6 +82,9 @@ class VideoCompositor(
     private var epochNanos: Long = 0
     @Volatile
     private var droppedFrames: Long = 0
+
+    @Volatile
+    private var cameraFrames: Long = 0
     private var lastFrameNanos: Long = 0
     private var lastDropReported = 0L
 
@@ -118,6 +121,7 @@ class VideoCompositor(
                 textureOesProgram = GlProgram(VERTEX_SHADER, FRAGMENT_OES)
                 createFbo()
                 ready = true
+                Log.i(TAG, "compositor initialized ${outputWidth}x$outputHeight @${fps}fps")
                 maybeStartLoop()
             } catch (t: Throwable) {
                 Log.e(TAG, "compositor init failed", t)
@@ -136,9 +140,11 @@ class VideoCompositor(
             if (surface != null && egl != null) {
                 previewEglSurface = egl?.createWindowSurface(surface)
             }
+            Log.i(TAG, "preview surface=${surface != null} egl=${previewEglSurface != null}")
             maybeStartLoop()
             if (previewEglSurface == null && surface != null) {
                 Log.w(TAG, "Could not create preview EGL surface")
+                listener.onError("Could not create the preview graphics surface on this device.")
             }
         }
     }
@@ -153,6 +159,7 @@ class VideoCompositor(
             if (surface != null && egl != null) {
                 encoderEglSurface = egl?.createWindowSurface(surface)
             }
+            Log.i(TAG, "encoder surface=${surface != null} egl=${encoderEglSurface != null}")
             maybeStartLoop()
             if (encoderEglSurface == null && surface != null) {
                 Log.w(TAG, "Could not create encoder EGL surface")
@@ -188,6 +195,8 @@ class VideoCompositor(
 
     fun totalDroppedFrames(): Long = droppedFrames
 
+    fun cameraFrameCount(): Long = cameraFrames
+
     fun provideCameraTexture(
         width: Int,
         height: Int,
@@ -208,6 +217,10 @@ class VideoCompositor(
             cameraSourceHeight = height
             cameraRotation = rotationDegrees
             cameraMirror = mirror
+            Log.i(TAG, "camera texture ${width}x$height rot=$rotationDegrees mirror=$mirror")
+            // Only start the preview loop once the camera consumer exists. Starting it
+            // earlier can starve this request behind a blocking first swap on some devices.
+            maybeStartLoop()
             val st = cameraSurfaceTexture ?: return@post
             mainHandler.post { callback(st) }
         }
@@ -253,7 +266,12 @@ class VideoCompositor(
     // -----------------------------------------------------------------------
 
     private fun maybeStartLoop() {
-        val shouldRender = previewEglSurface != null || encoderEglSurface != null
+        val hasOutput = previewEglSurface != null || encoderEglSurface != null
+        // A preview-only compositor waits for the camera consumer to exist; live
+        // encoding can start immediately. This avoids a first-swap stall blocking the
+        // camera texture setup on devices with slow SurfaceView handshakes.
+        val previewReady = previewEglSurface == null || cameraSurfaceTexture != null || encoderEglSurface != null
+        val shouldRender = hasOutput && previewReady
         if (shouldRender && !rendering) {
             rendering = true
             lastFrameNanos = SystemClock.elapsedRealtimeNanos()
@@ -330,6 +348,8 @@ class VideoCompositor(
             cameraFrameAvailable = false
             try {
                 cameraSurfaceTexture?.updateTexImage()
+                cameraFrames++
+                if (cameraFrames == 1L) Log.i(TAG, "first camera frame received")
             } catch (t: Throwable) {
                 Log.w(TAG, "camera updateTexImage failed", t)
             }

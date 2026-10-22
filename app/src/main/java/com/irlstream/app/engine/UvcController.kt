@@ -205,7 +205,9 @@ class UvcController(
             val supported = cam.supportedSizeList.orEmpty()
             val chosen = chooseSize(supported)
             val st = surfaceTexture ?: throw IllegalStateException("Preview surface unavailable")
+            Log.i(TAG, "UVC open ${deviceName(device)} supported=${supported.size} chosen=${chosen.width}x${chosen.height}")
             val started = startPreviewWithFallback(cam, st, chosen, supported)
+            Log.i(TAG, "UVC preview started ${started.width}x${started.height} format=${started.type}")
             try {
                 cam.setAutoFocus(true)
             } catch (_: Throwable) {

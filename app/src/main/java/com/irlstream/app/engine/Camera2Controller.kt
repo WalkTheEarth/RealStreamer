@@ -81,6 +81,7 @@ class Camera2Controller(
                     return@post
                 }
                 val size = chooseSize(sizes, targetWidth, targetHeight)
+                Log.i(TAG, "opening camera $id, target=${targetWidth}x$targetHeight -> ${size.width}x${size.height}, sizes=${sizes.size}")
                 surfaceTexture.setDefaultBufferSize(size.width, size.height)
                 val previewSurface = Surface(surfaceTexture)
                 surface = previewSurface
@@ -97,6 +98,7 @@ class Camera2Controller(
                             return
                         }
                         device = camera
+                        Log.i(TAG, "camera $id opened")
                         try {
                             camera.createCaptureSession(listOf(previewSurface), object : CameraCaptureSession.StateCallback() {
                                 override fun onConfigured(captureSession: CameraCaptureSession) {
@@ -105,6 +107,7 @@ class Camera2Controller(
                                         return
                                     }
                                     session = captureSession
+                                    Log.i(TAG, "capture session configured for $id")
                                     val builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                                         addTarget(previewSurface)
                                         set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
@@ -147,6 +150,7 @@ class Camera2Controller(
                     }
 
                     override fun onDisconnected(camera: CameraDevice) {
+                        Log.w(TAG, "camera $id disconnected")
                         if (generation != openGeneration) {
                             camera.close()
                             return
@@ -157,6 +161,7 @@ class Camera2Controller(
                     }
 
                     override fun onError(camera: CameraDevice, error: Int) {
+                        Log.e(TAG, "camera $id error $error")
                         if (generation != openGeneration) {
                             camera.close()
                             return
@@ -168,10 +173,13 @@ class Camera2Controller(
                     }
                 }, handler)
             } catch (e: CameraAccessException) {
+                Log.e(TAG, "CameraAccessException", e)
                 onError("Camera access failed: ${e.message}")
             } catch (e: SecurityException) {
+                Log.e(TAG, "SecurityException", e)
                 onError("Camera permission is required")
             } catch (t: Throwable) {
+                Log.e(TAG, "Could not open camera", t)
                 onError("Could not open camera: ${t.message}")
             }
         }
